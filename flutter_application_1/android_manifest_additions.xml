@@ -1,0 +1,43 @@
+<!-- 
+  SpendSense — Required Android Permissions
+  Add these to: android/app/src/main/AndroidManifest.xml
+  Inside the <manifest> tag, BEFORE the <application> tag.
+-->
+
+<!-- Core permissions for SMS reading -->
+<uses-permission android:name="android.permission.RECEIVE_SMS"/>
+<uses-permission android:name="android.permission.READ_SMS"/>
+
+<!-- Network access for Claude API and Apps Script webhook -->
+<uses-permission android:name="android.permission.INTERNET"/>
+
+<!-- Microphone for voice input -->
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+<!-- Keep app running in background for SMS listener -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+<!-- Notification permission (Android 13+) -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+<!-- 
+  Inside the <application> tag, add the SMS receiver:
+  
+  <receiver android:name="com.example.spendsense.SmsReceiver"
+    android:exported="true">
+    <intent-filter android:priority="2147483647">
+      <action android:name="android.provider.Telephony.SMS_RECEIVED"/>
+    </intent-filter>
+  </receiver>
+
+  Also inside <application>, add the boot receiver to restart
+  the SMS listener after phone reboots:
+  
+  <receiver android:name="com.example.spendsense.BootReceiver"
+    android:exported="true">
+    <intent-filter>
+      <action android:name="android.intent.action.BOOT_COMPLETED"/>
+    </intent-filter>
+  </receiver>
+-->

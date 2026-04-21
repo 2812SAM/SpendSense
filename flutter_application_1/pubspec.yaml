@@ -1,0 +1,60 @@
+name: spendsense
+description: Zero-touch AI expense tracker for Indian UPI users
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.0.0
+
+  # SMS reading (Android only)
+  telephony:
+    path: plugins/telephony
+
+  # HTTP calls to Claude API and Apps Script
+  http: ^1.1.0
+
+  # Local SQLite database (merchant memory dictionary)
+  sqflite: ^2.3.0
+  path: ^1.8.3
+
+  # Push notifications (popup after SMS)
+  flutter_local_notifications: ^17.2.0
+
+  # Voice / speech-to-text
+  speech_to_text: ^7.3.0
+
+  # Permissions (SMS, microphone)
+  permission_handler: ^11.2.0
+
+  # Simple key-value storage (API key, webhook URL, settings)
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+
+  # Secure hashing for deduplication
+  crypto: ^3.0.3
+
+  # Date formatting
+  intl: ^0.19.0
+
+  # JSON parsing helpers
+  json_annotation: ^4.8.1
+
+  # Notification scheduling
+  timezone: ^0.9.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.3
+  sqflite_common_ffi: ^2.3.0
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.7
+  json_serializable: ^6.7.1
+
+flutter:
+  uses-material-design: true

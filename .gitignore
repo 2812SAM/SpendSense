@@ -1,0 +1,107 @@
+# Flutter & Dart
+flutter_application_1/.dart_tool/
+flutter_application_1/build/
+flutter_application_1/.flutter-plugins
+flutter_application_1/.flutter-plugins-dependencies
+flutter_application_1/.packages
+flutter_application_1/.pub-cache/
+flutter_application_1/pubspec.lock
+*.iml
+*.lock
+
+# Android
+flutter_application_1/android/.gradle/
+flutter_application_1/android/build/
+flutter_application_1/android/local.properties
+flutter_application_1/.android/
+flutter_application_1/*.apk
+flutter_application_1/*.aab
+flutter_application_1/android/**/GeneratedPluginRegistrant.java
+
+# iOS
+flutter_application_1/ios/Flutter/Flutter.framework/
+flutter_application_1/ios/Flutter/Flutter.podspec
+flutter_application_1/ios/Flutter/Generated.xcconfig
+flutter_application_1/ios/Pods/
+flutter_application_1/ios/Podfile.lock
+
+# macOS
+flutter_application_1/macos/Flutter/GeneratedPluginRegistrant.swift
+flutter_application_1/macos/Flutter/Flutter-Debug.xcconfig
+flutter_application_1/macos/Flutter/Flutter-Release.xcconfig
+
+# Linux
+flutter_application_1/linux/flutter/generated_plugins.cmake
+flutter_application_1/linux/flutter/generated_pluginregistrant.cc
+flutter_application_1/linux/flutter/generated_pluginregistrant.h
+flutter_application_1/linux/flutter/generated_plugins.gni
+
+# Web
+flutter_application_1/web/plugins/
+flutter_application_1/lib/generated_plugin_registrant.dart
+
+# IDEs
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+.iml
+
+# Editor directories and files
+.history
+.ionide
+
+# Local environment files (SENSITIVE - DO NOT COMMIT)
+.env
+.env.local
+.env*.local
+.env.*.local
+*.pem
+*.key
+*.jks
+*.keystore
+
+# Secrets and credentials (SENSITIVE - DO NOT COMMIT)
+lib/config/secrets.dart
+lib/config/api_keys.dart
+android/key.properties
+android/app/key.jks
+backend/.env.js
+backend/config.json
+config/local_config.dart
+secrets.json
+
+# SecureStorageService / Firebase configs
+google-services.json
+GoogleService-Info.plist
+
+# Coverage reports
+coverage/
+.coverage
+
+# Build outputs
+build/
+dist/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Test outputs
+test_results/
+test_output/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+*.backup
