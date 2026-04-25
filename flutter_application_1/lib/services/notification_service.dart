@@ -64,8 +64,10 @@ class NotificationService {
       'id': transaction.id,
     });
 
+    final notificationId = _getNotificationId(transaction.id);
+
     await _plugin.show(
-      AppConstants.notifTransactionId,
+      notificationId,
       '₹${transaction.amount.toStringAsFixed(0)} · ${transaction.merchant}',
       'Tap to categorise',
       const NotificationDetails(
@@ -88,8 +90,14 @@ class NotificationService {
     }
   }
 
-  Future<void> dismissTransactionNotification() async {
-    await _plugin.cancel(AppConstants.notifTransactionId);
+  Future<void> dismissTransactionNotification(String transactionId) async {
+    await _plugin.cancel(_getNotificationId(transactionId));
+  }
+
+  int _getNotificationId(String transactionId) {
+    // Generate a unique integer ID from the transaction string ID.
+    // Using hashCode & 0x7FFFFFFF ensures a positive 31-bit integer.
+    return transactionId.hashCode & 0x7FFFFFFF;
   }
 
   Future<void> dismissDigestNotification() async {
