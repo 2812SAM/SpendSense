@@ -5,7 +5,7 @@
 | SPEND-001 | Implement Income and Refund transaction types | [TODO] | PM | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
 | SPEND-002 | Refactor AppState into domain services | [IN PROGRESS] | FlutterDev | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
 | SPEND-003 | Add Maestro E2E test suite | [TODO] | QA | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
-| SPEND-004 | Implement Unique Notification IDs for back-to-back alerts | [IN PROGRESS] | UX | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-004 | Implement Unique Notification IDs for back-to-back alerts | [DONE] | UX | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
 | SPEND-005 | Encrypt SQLite database with SQLCipher | [DONE] | SecOps/FlutterDev | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
 | SPEND-006 | Setup GitHub Actions for automated testing | [DONE] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
 | SPEND-007 | Implement Idempotency in Google Sheets Sync | [TODO] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
