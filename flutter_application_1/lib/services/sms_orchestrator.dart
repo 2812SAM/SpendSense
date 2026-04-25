@@ -8,7 +8,6 @@ import '../services/local_parser_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 import '../services/voice_service.dart';
-import '../services/digest_scheduler.dart';
 import '../core/constants.dart';
 
 enum SmsProcessingResult {
@@ -26,7 +25,6 @@ class SmsOrchestrator {
   final SecureStorageService _secure;
   final SyncService _sync;
   final VoiceService _voice;
-  final DigestScheduler _digest;
 
   SmsOrchestrator({
     ClaudeService? claude,
@@ -36,15 +34,13 @@ class SmsOrchestrator {
     SecureStorageService? secure,
     SyncService? sync,
     VoiceService? voice,
-    DigestScheduler? digest,
   })  : _claude = claude ?? ClaudeService.instance,
         _local = local ?? LocalStorageService.instance,
         _notif = notif ?? NotificationService.instance,
         _localParser = localParser ?? LocalParserService.instance,
         _secure = secure ?? SecureStorageService.instance,
         _sync = sync ?? SyncService.instance,
-        _voice = voice ?? VoiceService.instance,
-        _digest = digest ?? DigestScheduler.instance;
+        _voice = voice ?? VoiceService.instance;
 
   static final SmsOrchestrator instance = SmsOrchestrator();
 
@@ -214,7 +210,7 @@ class SmsOrchestrator {
       resolvedType,
       isDynamic: isDynamic,
     );
-    await _notif.dismissTransactionNotification(transaction.id);
+    await _notif.dismissTransactionNotification();
     await _sync.syncTransaction(confirmed);
   }
 

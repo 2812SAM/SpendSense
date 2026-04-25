@@ -3,15 +3,19 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../core/constants.dart';
 import '../models/transaction.dart';
+import 'secure_storage_service.dart';
 
 class ClaudeService {
   final http.Client _client;
+  final SecureStorageService _secure;
 
-  ClaudeService({http.Client? client}) : _client = client ?? http.Client();
+  ClaudeService({
+    http.Client? client,
+    SecureStorageService? secure,
+  })  : _client = client ?? http.Client(),
+        _secure = secure ?? SecureStorageService.instance;
 
   static final ClaudeService instance = ClaudeService();
 
@@ -189,7 +193,6 @@ Based on this, return ONLY a JSON:
   }
 
   Future<String?> _getApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(AppConstants.prefClaudeApiKey);
+    return await _secure.readSecret(AppConstants.prefClaudeApiKey);
   }
 }

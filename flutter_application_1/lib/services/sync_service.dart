@@ -1,7 +1,6 @@
 import '../models/transaction.dart';
 import '../services/sheets_service.dart';
 import '../services/local_storage_service.dart';
-import '../core/constants.dart';
 
 class SyncService {
   final SheetsService _sheets;
