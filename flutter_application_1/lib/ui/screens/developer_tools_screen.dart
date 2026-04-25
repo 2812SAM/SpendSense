@@ -19,7 +19,7 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) {
-      return const Scaffold(body: Center(child: Text('Debug mode only')));
+      return const Scaffold(body: Center(child: Text('Debug Mode only')));
     }
 
     final appState = Provider.of<AppState>(context, listen: false);
