@@ -12,8 +12,13 @@ import '../services/secure_storage_service.dart';
 
 class SheetsService {
   final http.Client _client;
+  final SecureStorageService _secure;
 
-  SheetsService({http.Client? client}) : _client = client ?? http.Client();
+  SheetsService({
+    http.Client? client,
+    SecureStorageService? secure,
+  })  : _client = client ?? http.Client(),
+        _secure = secure ?? SecureStorageService.instance;
 
   static final SheetsService instance = SheetsService();
 
@@ -54,6 +59,11 @@ class SheetsService {
   }
 
   Future<String?> getSavedWebhookUrl() async {
+    final secureUrl = await _secure.readSecret(AppConstants.prefWebhookUrl);
+    if (secureUrl != null && secureUrl.isNotEmpty) {
+      return secureUrl;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final current = prefs.getString(AppConstants.prefWebhookUrl);
 

@@ -35,13 +35,10 @@ void main() {
   setUp(() {
     appState = AppState(
       sms: MockSmsService(),
-      claude: MockClaudeService(),
       local: MockLocalStorageService(),
       notif: MockNotificationService(),
       voice: MockVoiceService(),
       digest: MockDigestScheduler(),
-      localParser: MockLocalParserService(),
-      sheets: MockSheetsService(),
       secure: MockSecureStorageService(),
     );
   });

@@ -13,6 +13,9 @@ import 'package:spendsense/services/secure_storage_service.dart';
 import 'package:spendsense/models/transaction.dart';
 import 'package:spendsense/core/constants.dart';
 
+import 'package:spendsense/services/sync_service.dart';
+import 'package:spendsense/services/sms_orchestrator.dart';
+
 class MockSmsService extends Mock implements SmsService {}
 
 class MockClaudeService extends Mock implements ClaudeService {}
@@ -43,6 +46,7 @@ void main() {
   late MockSecureStorageService mockSecure;
   late MockDigestScheduler mockDigest;
   late MockSheetsService mockSheets;
+  late MockVoiceService mockVoice;
 
   setUpAll(() {
     registerFallbackValue(MyTransaction(
@@ -67,16 +71,32 @@ void main() {
     mockSecure = MockSecureStorageService();
     mockDigest = MockDigestScheduler();
     mockSheets = MockSheetsService();
+    mockVoice = MockVoiceService();
 
-    appState = AppState(
-      sms: mockSms,
+    final syncService = SyncService(
+      sheets: mockSheets,
+      local: mockLocal,
+    );
+
+    final orchestrator = SmsOrchestrator(
       claude: mockClaude,
       local: mockLocal,
       notif: mockNotif,
       localParser: mockParser,
       secure: mockSecure,
+      sync: syncService,
+      voice: mockVoice,
+    );
+
+    appState = AppState(
+      sms: mockSms,
+      local: mockLocal,
+      notif: mockNotif,
+      voice: mockVoice,
       digest: mockDigest,
-      sheets: mockSheets,
+      secure: mockSecure,
+      sync: syncService,
+      orchestrator: orchestrator,
     );
 
     // Common Void Future Stubs
@@ -90,8 +110,10 @@ void main() {
         .thenAnswer((_) async => {});
     when(() => mockNotif.dismissTransactionNotification())
         .thenAnswer((_) async => {});
-    when(() => mockNotif.dismissDigestNotification())
+
+    when(() => mockNotif.dismissTransactionNotification())
         .thenAnswer((_) async => {});
+
     when(() => mockLocal.markConfirmed(any(),
         category: any(named: 'category'),
         type: any(named: 'type'),
@@ -287,6 +309,7 @@ void main() {
     verify(() => mockLocal.saveMerchantMemory(
         'Cafe', 'Food', AppConstants.typeExpense,
         isDynamic: false)).called(1);
+    verify(() => mockNotif.dismissTransactionNotification()).called(1);
     verify(() => mockSheets.logMyTransaction(any())).called(1);
   });
 }
