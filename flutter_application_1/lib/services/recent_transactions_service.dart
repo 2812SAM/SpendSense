@@ -13,6 +13,32 @@ class RecentTransactionsService {
     return LocalStorageService.instance.getRecentConfirmed(limit: limit);
   }
 
+  Future<List<AggregatedTransaction>> fetchAggregatedRecent() async {
+    final transactions = await fetchRecent(limit: 100);
+    final groups = <String, double>{};
+    final latestTimestamps = <String, DateTime>{};
+
+    for (final tx in transactions) {
+      groups[tx.category] = (groups[tx.category] ?? 0) + tx.amount;
+      final currentLatest = latestTimestamps[tx.category];
+      if (currentLatest == null || tx.timestamp.isAfter(currentLatest)) {
+        latestTimestamps[tx.category] = tx.timestamp;
+      }
+    }
+
+    final result = groups.entries.map((e) {
+      return AggregatedTransaction(
+        category: e.key,
+        totalAmount: e.value,
+        lastTransactionAt: latestTimestamps[e.key]!,
+      );
+    }).toList();
+
+    // Sort by latest transaction time
+    result.sort((a, b) => b.lastTransactionAt.compareTo(a.lastTransactionAt));
+    return result;
+  }
+
   Future<MonthlySummary> fetchMonthlySummary() async {
     final db = await LocalStorageService.instance.database;
     final now = DateTime.now();
@@ -62,4 +88,16 @@ class MonthlySummary {
   }
 
   String get formattedTotal => '₹${totalSpent.toStringAsFixed(0)}';
+}
+
+class AggregatedTransaction {
+  final String category;
+  final double totalAmount;
+  final DateTime lastTransactionAt;
+
+  AggregatedTransaction({
+    required this.category,
+    required this.totalAmount,
+    required this.lastTransactionAt,
+  });
 }

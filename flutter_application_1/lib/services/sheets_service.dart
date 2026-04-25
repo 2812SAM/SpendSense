@@ -8,10 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants.dart';
 import '../models/transaction.dart';
+import '../services/secure_storage_service.dart';
 
 class SheetsService {
-  SheetsService._();
-  static final SheetsService instance = SheetsService._();
+  final http.Client _client;
+
+  SheetsService({http.Client? client}) : _client = client ?? http.Client();
+
+  static final SheetsService instance = SheetsService();
 
   bool debugForceFail = false;
 
@@ -23,7 +27,7 @@ class SheetsService {
     }
 
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse(webhookUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(transaction.toSheetJson()),
@@ -67,8 +71,7 @@ class SheetsService {
   }
 
   Future<void> saveWebhookUrl(String url) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(AppConstants.prefWebhookUrl, url);
+    await SecureStorageService.instance.saveSecret(AppConstants.prefWebhookUrl, url);
   }
 
   Future<bool> testWebhook(String url) async {
@@ -84,7 +87,7 @@ class SheetsService {
         'type': 'EXPENSE',
       };
 
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(testPayload),

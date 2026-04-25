@@ -14,6 +14,7 @@ class MyTransaction {
   final String rawSms;
   final bool isLogged;
   final bool isConfirmed;
+  final String syncStatus;
 
   const MyTransaction({
     required this.id,
@@ -27,6 +28,7 @@ class MyTransaction {
     this.rawSms = '',
     this.isLogged = false,
     this.isConfirmed = false,
+    this.syncStatus = AppConstants.syncPending,
   });
 
   factory MyTransaction.fromClaudeResponse(
@@ -83,6 +85,7 @@ class MyTransaction {
     String? rawSms,
     bool? isLogged,
     bool? isConfirmed,
+    String? syncStatus,
   }) {
     return MyTransaction(
       id: id,
@@ -96,6 +99,41 @@ class MyTransaction {
       rawSms: rawSms ?? this.rawSms,
       isLogged: isLogged ?? this.isLogged,
       isConfirmed: isConfirmed ?? this.isConfirmed,
+      syncStatus: syncStatus ?? this.syncStatus,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'timestamp': timestamp.millisecondsSinceEpoch,
+      'amount': amount,
+      'merchant': merchant,
+      'category': category,
+      'confidence': confidence,
+      'type': type,
+      'note': note,
+      'raw_sms': rawSms,
+      'is_logged': isLogged ? 1 : 0,
+      'is_confirmed': isConfirmed ? 1 : 0,
+      'sync_status': syncStatus,
+    };
+  }
+
+  factory MyTransaction.fromMap(Map<String, dynamic> map) {
+    return MyTransaction(
+      id: map['id'] as String,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp'] as int),
+      amount: (map['amount'] as num).toDouble(),
+      merchant: map['merchant'] as String,
+      category: map['category'] as String,
+      confidence: map['confidence'] as String,
+      type: map['type'] as String,
+      note: map['note'] as String,
+      rawSms: map['raw_sms'] as String,
+      isLogged: (map['is_logged'] as int) == 1,
+      isConfirmed: (map['is_confirmed'] as int) == 1,
+      syncStatus: map['sync_status'] as String? ?? AppConstants.syncPending,
     );
   }
 
@@ -125,7 +163,7 @@ class MyTransaction {
   static String _formatDate(DateTime dt) {
     final day = dt.day.toString().padLeft(2, '0');
     final month = dt.month.toString().padLeft(2, '0');
-    return '$day/$month/${dt.year}';
+    return '${dt.year}-${month}-${day}'; // Standard ISO format for Sheets
   }
 
   static String _formatTime(DateTime dt) {

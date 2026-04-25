@@ -1,6 +1,6 @@
 # SpendSense Codebase TODO
 
-Last reviewed: 2026-04-19
+Last reviewed: 2026-04-24
 
 ## Current Stage: "Zero-Hurdle" Pivot
 SpendSense is pivoting from a **Cloud-First (Claude/Sheets)** requirement to a **Local-First (Regex/SQLite)** by default model to reduce onboarding friction.
@@ -13,38 +13,42 @@ SpendSense is pivoting from a **Cloud-First (Claude/Sheets)** requirement to a *
 - [x] **Persist ALL transactions locally first.**
 - [x] **Implement Secure Storage for secrets.**
 - [x] **100% Unit Test coverage for Local Parser.**
-- [x] **Deterministic Deduplication (Fingerprinting).**
-  Impact: Prevent duplicate entries from the same SMS. (Logic implemented using high-resolution SHA-256 hashing; verified via unit tests and simulation).
+- [x] **Verify core data logic with tests (>30% project coverage).**
+- [x] **Strict SMS-Body Deduplication.**
+  Impact: Replaced unreliable 15s window with strict SHA-256 body hashing for mathematical reliability.
+- [x] **Establish Regression Test Suite.**
+  Impact: 45+ tests including Unit, Widget (Learning Card), and E2E journeys.
 
 ## P1 Priority - Professionalism & Connectivity
 
 - [ ] **Google Sign-In Integration.**
-  Goal: Replace manual Apps Script setup with a one-tap connection using the official Google Drive/Sheets API.
 - [ ] **Initial Inbox Scan.**
-  Impact: On first launch, scan the last 20 payment SMS messages to provide immediate value/data to the user.
 - [ ] **Background Task Reliability (WorkManager).**
-  Impact: Use `workmanager` to ensure SMS processing and sync retries happen even when the app is killed.
+- [ ] **Foreground Auto-Popup.**
+  Impact: Categorization popups now auto-open if the app is active, bypassing system notification suppression.
 - [ ] **Error Reporting (Sentry).**
-  Impact: Integrate Sentry to catch and log production crashes automatically.
 - [ ] **Permission Guide UI.**
-  Impact: If permissions are denied, show a helpful "How to enable" guide on the Home Screen.
 - [x] **Dependency Injection (Refactor).**
-  Impact: Initial refactor for `AppState` and `SecureStorageService` complete to enable high-fidelity mocking.
-- [ ] **Dependency Injection (Full Coverage).**
-  Impact: Complete refactor for `SheetsService` and `ClaudeService` to allow 100% cloud-free integration testing.
 - [ ] **Automated CI/CD (GitHub Actions).**
-  Impact: Automatically run `flutter analyze` and `flutter test` on every push to ensure code quality.
 
 ## P2 Priority - UX and Reliability
 
 - [ ] **UI Transaction Grouping/Aggregation.**
-  Impact: Group multiple transactions from the same merchant (e.g., 10 Swiggy orders) into a single expandable UI element on the Home screen to reduce clutter.
 - [ ] **On-Device AI Exploration (Gemini Nano).**
-  Goal: Research using Google AI Edge for 100% local, high-accuracy classification without API keys.
 - [ ] **Fix Home Screen Live Updates.**
-  Impact: Ensure feed refreshes automatically via `StreamBuilder` when transactions are confirmed.
 - [ ] **Database Encryption (SQLCipher).**
-  Impact: Protect the local SQLite file with AES-256 encryption.
+
+## Future Roadmap (SpendSense Pro)
+
+- [ ] **Level 2 Deduplication: UTR/Ref ID Extraction.**
+  Goal: Extract unique banking reference numbers for 100% foolproof duplicate prevention.
+- [ ] **SpendSense Active Pay (UPI Integration).**
+  Goal: Handle payments directly in-app for zero-ambiguity context.
+- [ ] **Source Attribution (Multi-Bank).**
+  Goal: Automatically track spending per bank account based on SMS headers.
+- [ ] **Historical Reconciliation (Statement Import).**
+  Goal: Bulk import PDF/CSV statements to backfill financial history.
+
 
 ## Current Architecture: FULL LOCAL LEDGER
 The decision has been made: **SQLite is the primary source of truth.**
@@ -55,6 +59,12 @@ The decision has been made: **SQLite is the primary source of truth.**
 
 ## Build Order (Refined)
 1. **Permission/Manifest Fixes** (Foundation).
+2. **Setup Screen Bypass** (UX Quick Win).
+3. **Local Regex Parser** (Replacing mandatory AI).
+4. **Deduplication Logic** (Reliability).
+5. **Background Workmanager for Digest** (Reliability).
+6. **Optional AI/Cloud Toggle in Settings**.
+Manifest Fixes** (Foundation).
 2. **Setup Screen Bypass** (UX Quick Win).
 3. **Local Regex Parser** (Replacing mandatory AI).
 4. **Deduplication Logic** (Reliability).

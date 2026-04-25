@@ -2,8 +2,6 @@
 /// Shown at 9 PM (and accessible from HomeScreen banner).
 /// Shows all unconfirmed transactions from the day.
 /// User swipes through each one and confirms categories quickly.
-///
-/// UX goal: all pending transactions resolved in under 30 seconds.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +19,9 @@ class DigestScreen extends StatefulWidget {
 class _DigestScreenState extends State<DigestScreen> {
   // Map of transactionId → selected category
   final Map<String, String> _selections = {};
+  // Map of transactionId → isDynamic (Should we NOT remember this?)
+  final Map<String, bool> _dynamicMap = {};
+  
   int _currentIndex = 0;
   bool _isSubmitting = false;
 
@@ -33,7 +34,17 @@ class _DigestScreenState extends State<DigestScreen> {
   }
 
   void _selectCategory(String txId, String category) {
-    setState(() => _selections[txId] = category);
+    setState(() {
+      _selections[txId] = category;
+      // Default to "Remember" (isDynamic: false) when a category is picked
+      _dynamicMap.putIfAbsent(txId, () => false);
+    });
+  }
+
+  void _toggleRemember(String txId, bool remember) {
+    setState(() {
+      _dynamicMap[txId] = !remember;
+    });
   }
 
   void _next() {
@@ -54,10 +65,11 @@ class _DigestScreenState extends State<DigestScreen> {
     // Fill in any unselected transactions with 'Others'
     for (final tx in transactions) {
       _selections.putIfAbsent(tx.id, () => 'Others');
+      _dynamicMap.putIfAbsent(tx.id, () => false);
     }
 
     setState(() => _isSubmitting = true);
-    await state.confirmAll(_selections);
+    await state.confirmAll(_selections, dynamicMap: _dynamicMap);
     setState(() => _isSubmitting = false);
 
     if (mounted) Navigator.of(context).pop();
@@ -79,34 +91,32 @@ class _DigestScreenState extends State<DigestScreen> {
             return const _EmptyDigest();
           }
 
+          final currentTx = transactions[_currentIndex];
+
           return Column(
             children: [
-              // ── Progress indicator ──────────────────────────────────────
               _ProgressBar(
                 current: _currentIndex + 1,
                 total: transactions.length,
               ),
 
-              // ── Transaction card ────────────────────────────────────────
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _DigestCard(
-                    transaction: transactions[_currentIndex],
-                    selectedCategory:
-                        _selections[transactions[_currentIndex].id],
-                    onCategoryTap: (cat) =>
-                        _selectCategory(transactions[_currentIndex].id, cat),
+                    transaction: currentTx,
+                    selectedCategory: _selections[currentTx.id],
+                    isDynamic: _dynamicMap[currentTx.id] ?? false,
+                    onCategoryTap: (cat) => _selectCategory(currentTx.id, cat),
+                    onRememberToggle: (rem) => _toggleRemember(currentTx.id, rem),
                   ),
                 ),
               ),
 
-              // ── Navigation row ──────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
-                    // Back
                     if (_currentIndex > 0)
                       OutlinedButton(
                         onPressed: _prev,
@@ -119,11 +129,9 @@ class _DigestScreenState extends State<DigestScreen> {
 
                     const Spacer(),
 
-                    // Next or Done
                     if (_currentIndex < transactions.length - 1)
                       FilledButton(
-                        onPressed: _selections
-                                .containsKey(transactions[_currentIndex].id)
+                        onPressed: _selections.containsKey(currentTx.id)
                             ? _next
                             : null,
                         style: FilledButton.styleFrom(
@@ -158,7 +166,6 @@ class _DigestScreenState extends State<DigestScreen> {
   }
 }
 
-// ── Progress bar ──────────────────────────────────────────────────────────
 class _ProgressBar extends StatelessWidget {
   final int current;
   final int total;
@@ -194,16 +201,19 @@ class _ProgressBar extends StatelessWidget {
   }
 }
 
-// ── Individual transaction card ───────────────────────────────────────────
 class _DigestCard extends StatelessWidget {
   final MyTransaction transaction;
   final String? selectedCategory;
+  final bool isDynamic;
   final void Function(String) onCategoryTap;
+  final void Function(bool) onRememberToggle;
 
   const _DigestCard({
     required this.transaction,
     required this.selectedCategory,
+    required this.isDynamic,
     required this.onCategoryTap,
+    required this.onRememberToggle,
   });
 
   static const Map<String, String> _emojis = {
@@ -248,7 +258,6 @@ class _DigestCard extends StatelessWidget {
 
     if (name != null && name.trim().isNotEmpty) {
       await state.addCustomCategory(name);
-      // Automatically select the new one
       final formattedName =
           name.trim()[0].toUpperCase() + name.trim().substring(1).toLowerCase();
       onCategoryTap(formattedName);
@@ -272,7 +281,6 @@ class _DigestCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Amount + merchant
               Text(
                 '₹${transaction.amount.toStringAsFixed(0)}',
                 style:
@@ -290,7 +298,6 @@ class _DigestCard extends StatelessWidget {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
               const SizedBox(height: 14),
 
-              // Category chips
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -326,7 +333,6 @@ class _DigestCard extends StatelessWidget {
                       ),
                     );
                   }),
-                  // Custom button
                   GestureDetector(
                     onTap: () => _showCustomCategoryDialog(context, state),
                     child: AnimatedContainer(
@@ -346,6 +352,23 @@ class _DigestCard extends StatelessWidget {
                   ),
                 ],
               ),
+              
+              const SizedBox(height: 24),
+              if (selectedCategory != null)
+                Row(
+                  children: [
+                    Checkbox(
+                      value: !isDynamic, 
+                      onChanged: (val) => onRememberToggle(val ?? true),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Remember this category for future payments here',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -361,7 +384,6 @@ class _DigestCard extends StatelessWidget {
   }
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────
 class _EmptyDigest extends StatelessWidget {
   const _EmptyDigest();
 

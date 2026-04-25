@@ -20,8 +20,9 @@ class AppConstants {
 
   // SQLite
   static const String dbName = 'spendsense.db';
-  static const int dbVersion = 3;
+  static const int dbVersion = 4;
   static const String transactionsTable = 'transactions';
+  static const String dbEncryptionKey = 'db_encryption_key';
 
   // Confidence thresholds
   static const String confidenceHigh = 'HIGH';
@@ -77,4 +78,11 @@ class AppConstants {
   static const int digestHour = 21;
   static const int digestMinute = 0;
   static const String digestTimeZone = 'Asia/Kolkata';
+
+  /// Detects common Indian bank SMS headers/IDs (e.g., AX-SBIUPI, HDFCBK)
+  static bool isGenericId(String name) {
+    // Bank IDs are typically all uppercase. Real merchants are usually PascalCase or lowercase.
+    return RegExp(r'^[A-Z0-9]{2}-[A-Z0-9]{2,}|^[A-Z]{4,}[0-9]*$')
+        .hasMatch(name);
+  }
 }

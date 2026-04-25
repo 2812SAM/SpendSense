@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/transaction.dart';
 import '../../services/recent_transactions_service.dart';
 import '../../state/app_state.dart';
 
@@ -15,7 +14,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<MyTransaction> _recent = [];
+  List<AggregatedTransaction> _recent = [];
   MonthlySummary? _summary;
   bool _loading = true;
   bool _reloadInFlight = false;
@@ -57,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final service = RecentTransactionsService.instance;
-    final recent = await service.fetchRecent();
+    final recent = await service.fetchAggregatedRecent();
     final summary = await service.fetchMonthlySummary();
 
     if (mounted) {
@@ -137,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 horizontal: 16,
                                 vertical: 3,
                               ),
-                              child: _TransactionRow(tx: _recent[index]),
+                              child: _AggregatedTransactionRow(tx: _recent[index]),
                             ),
                             childCount: _recent.length,
                           ),
@@ -346,10 +345,10 @@ class _PendingBanner extends StatelessWidget {
   }
 }
 
-class _TransactionRow extends StatelessWidget {
-  final MyTransaction tx;
+class _AggregatedTransactionRow extends StatelessWidget {
+  final AggregatedTransaction tx;
 
-  const _TransactionRow({required this.tx});
+  const _AggregatedTransactionRow({required this.tx});
 
   static const Map<String, String> _emojis = {
     'Food': '🍕',
@@ -377,9 +376,8 @@ class _TransactionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final emoji = _emojis[tx.category] ?? '📦';
+    final emoji = _emojis[tx.category] ?? '🏷️';
     final background = _categoryColors[tx.category] ?? const Color(0xFFF9FAFB);
-    final isLoan = tx.type == 'LOAN';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 1),
@@ -407,38 +405,25 @@ class _TransactionRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  tx.merchant,
+                  tx.category,
                   style: const TextStyle(
                       fontSize: 14, fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  isLoan
-                      ? 'Loan · ${tx.note.isNotEmpty ? tx.note : "given"}'
-                      : tx.category,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  'Last spend: ${_shortTime(tx.lastTransactionAt)}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[400]),
                 ),
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '₹${tx.amount.toStringAsFixed(0)}',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: isLoan ? Colors.orange[700] : Colors.grey[900],
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                _shortTime(tx.timestamp),
-                style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-              ),
-            ],
+          Text(
+            '₹${tx.totalAmount.toStringAsFixed(0)}',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[900],
+            ),
           ),
         ],
       ),

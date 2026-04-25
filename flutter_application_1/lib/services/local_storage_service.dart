@@ -1,17 +1,22 @@
 /// SpendSense - Local storage service.
 /// Keeps merchant memory plus the full local transaction ledger.
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import '../core/constants.dart';
 import '../models/merchant_memory.dart';
 import '../models/transaction.dart';
+import 'secure_storage_service.dart';
 
 class LocalStorageService {
-  LocalStorageService._();
-  static final LocalStorageService instance = LocalStorageService._();
+  final String dbName;
+  LocalStorageService({this.dbName = AppConstants.dbName});
+
+  static final LocalStorageService instance = LocalStorageService();
 
   Database? _db;
 
@@ -21,15 +26,92 @@ class LocalStorageService {
   }
 
   Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, AppConstants.dbName);
+    String path;
+    if (dbName == ':memory:') {
+      path = inMemoryDatabasePath;
+      return databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: AppConstants.dbVersion,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+        ),
+      );
+    } else {
+      final dbPath = await databaseFactory.getDatabasesPath();
+      path = join(dbPath, dbName);
+    }
+
+    // Secure database with SQLCipher
+    final password = await SecureStorageService.instance.getDatabaseKey();
+    await _checkAndEncryptExistingDatabase(path, password);
+
+    if (password.isEmpty) {
+      return databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: AppConstants.dbVersion,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+        ),
+      );
+    }
 
     return openDatabase(
       path,
+      password: password,
       version: AppConstants.dbVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+  }
+
+  /// Ensures an existing unencrypted database is migrated to SQLCipher.
+  Future<void> _checkAndEncryptExistingDatabase(
+      String path, String password) async {
+    if (!await databaseFactory.databaseExists(path)) return;
+
+    Database? db;
+    try {
+      // Try opening without a password (plaintext check)
+      db = await databaseFactory.openDatabase(path);
+      // If we can read the version, it's unencrypted
+      await db.rawQuery('PRAGMA user_version');
+
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('SpendSense SecOps: Unencrypted database found. Encrypting...');
+      }
+
+      await db.close();
+      await _encryptDatabase(path, password);
+    } catch (e) {
+      // If it fails, it's likely already encrypted or empty
+      await db?.close();
+    }
+  }
+
+  Future<void> _encryptDatabase(String path, String password) async {
+    final tempPath = join(dirname(path), 'temp_encrypted.db');
+    final db = await databaseFactory.openDatabase(path);
+
+    // SQLCipher export pattern
+    await db.execute("ATTACH DATABASE ? AS encrypted KEY ?", [tempPath, password]);
+    await db.execute("SELECT sqlcipher_export('encrypted')");
+    await db.execute("DETACH DATABASE encrypted");
+    await db.close();
+
+    // Replace original file with encrypted version
+    final originalFile = File(path);
+    final tempFile = File(tempPath);
+
+    if (await tempFile.exists()) {
+      if (await originalFile.exists()) {
+        await originalFile.delete();
+      }
+      await tempFile.copy(path);
+      await tempFile.delete();
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -45,6 +127,10 @@ class LocalStorageService {
     }
     if (oldVersion < 3) {
       await _createCustomCategoriesTable(db);
+    }
+    if (oldVersion < 4) {
+      await db.execute(
+          'ALTER TABLE merchant_memory ADD COLUMN is_dynamic INTEGER NOT NULL DEFAULT 0');
     }
   }
 
@@ -63,6 +149,7 @@ class LocalStorageService {
         merchant_key TEXT    NOT NULL UNIQUE,
         category     TEXT    NOT NULL,
         type         TEXT    NOT NULL DEFAULT 'EXPENSE',
+        is_dynamic   INTEGER NOT NULL DEFAULT 0,
         count        INTEGER NOT NULL DEFAULT 1,
         last_seen    INTEGER NOT NULL
       )
@@ -165,8 +252,9 @@ class LocalStorageService {
   Future<void> saveMerchantMemory(
     String rawMerchantName,
     String category,
-    String type,
-  ) async {
+    String type, {
+    bool isDynamic = false,
+  }) async {
     final key = MerchantMemory.normalise(rawMerchantName);
     final db = await database;
     final existing = await lookupMerchant(key);
@@ -178,6 +266,7 @@ class LocalStorageService {
           merchantKey: key,
           category: category,
           type: type,
+          isDynamic: isDynamic,
           count: 1,
           lastSeen: DateTime.now(),
         ).toMap(),
@@ -190,12 +279,26 @@ class LocalStorageService {
       {
         'category': category,
         'type': type,
+        'is_dynamic': isDynamic ? 1 : 0,
         'count': existing.count + 1,
         'last_seen': DateTime.now().millisecondsSinceEpoch,
       },
       where: 'merchant_key = ?',
       whereArgs: [key],
     );
+  }
+
+  Future<MyTransaction?> findTransactionById(String id) async {
+    final db = await database;
+    final results = await db.query(
+      AppConstants.transactionsTable,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    if (results.isEmpty) return null;
+    return _mapToTransaction(results.first);
   }
 
   Future<void> upsertTransaction(
@@ -271,24 +374,11 @@ class LocalStorageService {
     final db = await database;
     final results = await db.query(
       AppConstants.transactionsTable,
-      where: 'needs_user_input = 1 AND is_confirmed = 0',
+      where: 'needs_user_input = 1',
       orderBy: 'timestamp DESC',
     );
 
     return results.map(_mapToTransaction).toList();
-  }
-
-  Future<MyTransaction?> findTransactionById(String transactionId) async {
-    final db = await database;
-    final results = await db.query(
-      AppConstants.transactionsTable,
-      where: 'id = ?',
-      whereArgs: [transactionId],
-      limit: 1,
-    );
-
-    if (results.isEmpty) return null;
-    return _mapToTransaction(results.first);
   }
 
   Future<List<MyTransaction>> getRecentConfirmed({int limit = 30}) async {
@@ -377,19 +467,18 @@ class LocalStorageService {
   }
 
   MyTransaction _mapToTransaction(Map<String, dynamic> map) {
-    return MyTransaction(
-      id: map['id'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp'] as int),
-      amount: (map['amount'] as num).toDouble(),
-      merchant: map['merchant'] as String,
-      category: map['category'] as String,
-      confidence: map['confidence'] as String,
-      type: map['type'] as String,
-      note: map['note'] as String,
-      rawSms: map['raw_sms'] as String,
-      isLogged: (map['is_logged'] as int) == 1,
-      isConfirmed: (map['is_confirmed'] as int) == 1,
+    return MyTransaction.fromMap(map);
+  }
+
+  Future<List<MyTransaction>> getUnsynced() async {
+    final db = await database;
+    final results = await db.query(
+      AppConstants.transactionsTable,
+      where: 'sync_status != ?',
+      whereArgs: [AppConstants.syncSynced],
+      orderBy: 'timestamp DESC',
     );
+    return results.map(_mapToTransaction).toList();
   }
 
   Future<List<String>> getCustomCategories() async {

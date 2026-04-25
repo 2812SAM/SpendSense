@@ -146,7 +146,7 @@ class AppState extends ChangeNotifier {
     }
 
     // 2. Try Merchant Memory
-    final merchantHint = _extractMerchantHint(smsBody);
+    final merchantHint = _fallbackMerchantName(smsBody, sender);
     final memory = await _local.lookupMerchant(merchantHint);
     if (memory != null) {
       final quickTransaction = MyTransaction(
@@ -157,19 +157,36 @@ class AppState extends ChangeNotifier {
         category: memory.category,
         confidence: AppConstants.confidenceHigh,
         type: memory.type,
-        note: 'Auto-categorised from memory',
+        note: memory.isDynamic
+            ? 'Pre-filled from memory'
+            : 'Auto-categorised from memory',
         rawSms: smsBody,
-        isConfirmed: true,
+        isConfirmed: !memory.isDynamic,
       );
 
-      await _local.upsertTransaction(
-        quickTransaction,
-        needsUserInput: false,
-        sender: sender,
-        syncStatus: AppConstants.syncPending,
-        fingerprint: fingerprint,
-      );
-      await _syncTransaction(quickTransaction);
+      if (memory.isDynamic) {
+        // For dynamic peers, save as pending and trigger popup
+        await _local.upsertTransaction(
+          quickTransaction,
+          needsUserInput: true,
+          sender: sender,
+          syncStatus: AppConstants.syncPending,
+          fingerprint: fingerprint,
+        );
+        await _notif.showTransactionPopup(quickTransaction);
+        await _loadPendingMyTransactions();
+        _setState(TxState.awaitingUser);
+      } else {
+        // For static merchants, log silently
+        await _local.upsertTransaction(
+          quickTransaction,
+          needsUserInput: false,
+          sender: sender,
+          syncStatus: AppConstants.syncPending,
+          fingerprint: fingerprint,
+        );
+        await _syncTransaction(quickTransaction);
+      }
       return;
     }
 
@@ -233,14 +250,23 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  @visibleForTesting
+  String generateFingerprint(String sms, String sender) {
+    return _generateFingerprint(sms, sender);
+  }
+
   String _generateFingerprint(String sms, String sender) {
-    // Generate a SHA-256 hash of the full SMS body + sender
+    // Generate a SHA-256 hash of the full SMS body + sender.
+    // This is "Strict Raw Body" deduplication—mathematically foolproof if the SMS contains a unique ID.
     final bytes = utf8.encode('$sender|$sms');
     return sha256.convert(bytes).toString();
   }
 
   Future<void> confirmCategory(
-      MyTransaction transaction, String category) async {
+    MyTransaction transaction,
+    String category, {
+    bool isDynamic = false,
+  }) async {
     final resolvedType =
         category == 'Loan' ? AppConstants.typeLoan : transaction.type;
     final resolvedCategory = category == 'Loan' ? 'Loan' : category;
@@ -258,19 +284,14 @@ class AppState extends ChangeNotifier {
       note: confirmed.note,
     );
     await _local.saveMerchantMemory(
-      confirmed.merchant,
+      transaction.merchant,
       resolvedCategory,
       resolvedType,
+      isDynamic: isDynamic,
     );
-    await _local.upsertTransaction(
-      confirmed,
-      needsUserInput: false,
-      syncStatus: AppConstants.syncPending,
-    );
-    final synced = await _syncTransaction(confirmed);
-    if (synced) {
-      _setState(TxState.confirmed);
-    }
+    await _notif.dismissTransactionNotification();
+    await _syncTransaction(confirmed);
+    await _loadPendingMyTransactions();
   }
 
   Future<bool> confirmWithVoice(MyTransaction transaction) async {
@@ -320,14 +341,17 @@ class AppState extends ChangeNotifier {
     await _loadPendingMyTransactions();
   }
 
-  Future<void> confirmAll(Map<String, String> categoryMap) async {
+  Future<void> confirmAll(Map<String, String> categoryMap,
+      {Map<String, bool>? dynamicMap}) async {
     final transactions = List<MyTransaction>.from(_pendingMyTransactions);
 
     for (final transaction in transactions) {
       final category = categoryMap[transaction.id] ?? 'Others';
-      await confirmCategory(transaction, category);
+      final isDynamic = dynamicMap?[transaction.id] ?? false;
+      await confirmCategory(transaction, category, isDynamic: isDynamic);
     }
 
+    await _notif.dismissDigestNotification();
     await _loadPendingMyTransactions();
   }
 

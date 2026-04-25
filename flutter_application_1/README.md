@@ -8,12 +8,13 @@ SpendSense is a zero-touch, privacy-first expense tracker for Indian UPI users.
 
 - **Instant Automation:** Captures expenses from SMS immediately after granting permissions.
 - **Local-First Ledger:** All transactions are stored in a private SQLite database on your phone.
-- **Merchant Learning:** Remembers your categorizations locally (e.g., "Zomato" -> Food) so it gets smarter without the cloud.
+- **Merchant Learning:** Differentiates between shops (Static) and friends (Dynamic) to ensure accurate personal tracking.
 - **Custom Categories:** Create and manage your own spending labels that integrate with AI and local storage.
 - **Secure by Design:** API keys and sensitive URLs are stored in encrypted system storage (Keychain/Keystore) via `SecureStorageService`.
-- **Logic Verified:** Core parsing logic is 100% verified with automated Unit Tests.
+- **Logic Verified:** Core data services, UI components, and AI logic are protected by a comprehensive automated test suite (Unit, Widget, and E2E journeys).
 - **Developer Ready:** Hidden internal debug menu to simulate transactions and test sync reliability.
-- **Automatic Deduplication:** Uses high-resolution SHA-256 fingerprinting to prevent duplicate transaction entries while supporting rapid legitimate purchases.
+- **Automatic Deduplication:** Uses strict SHA-256 body-hashing to prevent duplicate transaction entries from network retries.
+- **Smart Learning Memory:** Remembers categorization choices with **Generic ID Protection** to prevent accidental global auto-categorization for bank headers.
 - **Optional AI Power:** Connect a Claude API key for high-accuracy categorization of complex messages.
 - **Optional Cloud Sync:** Connect to Google Sheets via a simple "Sign in with Google" (planned) or manual Webhook for permanent backups.
 

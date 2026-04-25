@@ -46,6 +46,14 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
           _buildAction('Simulate Unknown (Manual Review)', () {
             appState.onPaymentSmsReceived(makeUnique(DebugSamples.unknown), 'UNKNOWN');
           }),
+          _buildAction('Simulate EXACT Duplicate (HDFC)', () {
+            // No salt added, tests deduplication and Merchant Memory
+            appState.onPaymentSmsReceived(DebugSamples.hdfc, 'AD-HDFCBK');
+          }),
+          _buildAction('Simulate EXACT Unknown (No Salt)', () {
+            // No salt, tests memory fallback and deduplication
+            appState.onPaymentSmsReceived(DebugSamples.unknown, 'UNKNOWN');
+          }),
           
           _buildSection('Sync Configuration'),
           SwitchListTile(

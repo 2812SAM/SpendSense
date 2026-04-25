@@ -9,8 +9,11 @@ import '../core/constants.dart';
 import '../models/transaction.dart';
 
 class ClaudeService {
-  ClaudeService._();
-  static final ClaudeService instance = ClaudeService._();
+  final http.Client _client;
+
+  ClaudeService({http.Client? client}) : _client = client ?? http.Client();
+
+  static final ClaudeService instance = ClaudeService();
 
   String _buildPrompt(String smsText, List<String> categories) {
     final catList = categories.join(', ') + ', ASK_USER';
@@ -150,7 +153,7 @@ Based on this, return ONLY a JSON:
     required int maxTokens,
     required String prompt,
   }) {
-    return http.post(
+    return _client.post(
       Uri.parse(AppConstants.claudeBaseUrl),
       headers: {
         'Content-Type': 'application/json',

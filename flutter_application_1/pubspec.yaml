@@ -19,7 +19,7 @@ dependencies:
   http: ^1.1.0
 
   # Local SQLite database (merchant memory dictionary)
-  sqflite: ^2.3.0
+  sqflite_sqlcipher: ^3.0.1
   path: ^1.8.3
 
   # Push notifications (popup after SMS)
@@ -49,6 +49,8 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   mocktail: ^1.0.3
   sqflite_common_ffi: ^2.3.0

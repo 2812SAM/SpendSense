@@ -1109,8 +1109,8 @@ Future developers should not infer product design from those directories.
 | App configured or not | `SharedPreferences` (`onboarding_done`) |
 | Claude API key | `SecureStorageService` |
 | Apps Script webhook URL | SecureStorageService |
-| User-defined categories | SQLite `custom_categories` |
-| Merchant learning | SQLite `merchant_memory` |
+| User-defined categories | SQLite `custom_categories` (v3) |
+| Merchant learning | SQLite `merchant_memory` (v4, includes `is_dynamic`) |
 | Transaction ledger | SQLite `transactions` |
 | Recent history shown on home | SQLite `transactions` read via `RecentTransactionsService` |
 | Pending review list | SQLite `transactions` where pending flags match |

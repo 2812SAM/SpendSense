@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
@@ -20,6 +23,22 @@ class SecureStorageService {
 
   Future<void> deleteSecret(String key) async {
     await _storage.delete(key: key);
+  }
+
+  /// Gets the database encryption key or generates one if it doesn't exist.
+  Future<String> getDatabaseKey() async {
+    String? key = await readSecret(AppConstants.dbEncryptionKey);
+    if (key == null || key.isEmpty) {
+      key = _generateRandomKey();
+      await saveSecret(AppConstants.dbEncryptionKey, key);
+    }
+    return key;
+  }
+
+  String _generateRandomKey() {
+    final random = Random.secure();
+    final values = List<int>.generate(32, (i) => random.nextInt(256));
+    return base64Url.encode(values);
   }
 
   /// Migrates secrets from SharedPreferences to SecureStorage if they exist.

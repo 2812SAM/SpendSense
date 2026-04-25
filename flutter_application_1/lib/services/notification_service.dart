@@ -79,6 +79,20 @@ class NotificationService {
       ),
       payload: payload,
     );
+
+    // If app is in foreground, auto-open the popup for immediate feedback
+    final nav = navigatorKey.currentState;
+    if (nav != null) {
+      nav.pushNamed('/popup', arguments: transaction);
+    }
+  }
+
+  Future<void> dismissTransactionNotification() async {
+    await _plugin.cancel(AppConstants.notifTransactionId);
+  }
+
+  Future<void> dismissDigestNotification() async {
+    await _plugin.cancel(AppConstants.notifDigestId);
   }
 
   Future<void> syncDigestSchedule(int pendingCount) async {
