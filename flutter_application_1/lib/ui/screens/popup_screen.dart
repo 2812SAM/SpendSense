@@ -42,14 +42,14 @@ class _PopupScreenState extends State<PopupScreen> {
 
   Future<void> _confirm() async {
     if (_selectedCategory == null) return;
-    
+
     final state = context.read<AppState>();
     await state.confirmCategory(
-      widget.myTransaction, 
+      widget.myTransaction,
       _selectedCategory!,
       isDynamic: !_rememberCategory,
     );
-    
+
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -72,7 +72,8 @@ class _PopupScreenState extends State<PopupScreen> {
                       const SizedBox(height: 32),
                       const Text(
                         'What was this for?',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 16),
                       _CategoryGrid(
@@ -81,14 +82,15 @@ class _PopupScreenState extends State<PopupScreen> {
                         onSelected: _onCategorySelected,
                       ),
                       const SizedBox(height: 24),
-                      
+
                       // ── Learning Card (High Visibility) ──────────────────────────────
                       if (_selectedCategory != null) ...[
                         _LearningCard(
                           merchant: widget.myTransaction.merchant,
                           category: _selectedCategory!,
                           value: _rememberCategory,
-                          isGeneric: AppConstants.isGenericId(widget.myTransaction.merchant),
+                          isGeneric: AppConstants.isGenericId(
+                              widget.myTransaction.merchant),
                           onChanged: (val) =>
                               setState(() => _rememberCategory = val),
                         ),
@@ -192,12 +194,16 @@ class _LearningCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: value
-            ? (isGeneric ? Colors.orange[50] : theme.colorScheme.primaryContainer.withOpacity(0.3))
+            ? (isGeneric
+                ? Colors.orange[50]
+                : theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
             : Colors.grey[50],
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: value
-              ? (isGeneric ? Colors.orange[300]! : theme.colorScheme.primary.withOpacity(0.5))
+              ? (isGeneric
+                  ? Colors.orange[300]!
+                  : theme.colorScheme.primary.withValues(alpha: 0.5))
               : Colors.grey[300]!,
           width: 1.5,
         ),
@@ -208,8 +214,14 @@ class _LearningCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                isGeneric ? Icons.warning_amber_rounded : Icons.psychology_rounded,
-                color: value ? (isGeneric ? Colors.orange[700] : theme.colorScheme.primary) : Colors.grey[600],
+                isGeneric
+                    ? Icons.warning_amber_rounded
+                    : Icons.psychology_rounded,
+                color: value
+                    ? (isGeneric
+                        ? Colors.orange[700]
+                        : theme.colorScheme.primary)
+                    : Colors.grey[600],
                 size: 28,
               ),
               const SizedBox(width: 12),
@@ -219,14 +231,19 @@ class _LearningCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: value ? (isGeneric ? Colors.orange[900] : theme.colorScheme.primary) : Colors.grey[700],
+                    color: value
+                        ? (isGeneric
+                            ? Colors.orange[900]
+                            : theme.colorScheme.primary)
+                        : Colors.grey[700],
                   ),
                 ),
               ),
               Switch(
                 value: value,
                 onChanged: onChanged,
-                activeColor: isGeneric ? Colors.orange[700] : theme.colorScheme.primary,
+                activeThumbColor:
+                    isGeneric ? Colors.orange[700] : theme.colorScheme.primary,
               ),
             ],
           ),
@@ -237,7 +254,9 @@ class _LearningCard extends StatelessWidget {
                 : 'This is a one-time categorization. SpendSense will ask you again next time.',
             style: TextStyle(
               fontSize: 13,
-              color: value ? (isGeneric ? Colors.orange[900] : Colors.black87) : Colors.grey[600],
+              color: value
+                  ? (isGeneric ? Colors.orange[900] : Colors.black87)
+                  : Colors.grey[600],
               height: 1.4,
             ),
           ),
@@ -256,7 +275,10 @@ class _LearningCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Generic bank ID detected. Remembering this might affect unrelated future payments.',
-                      style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -393,7 +415,7 @@ class _CategoryChip extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: Text(
-          '$emoji $label', 
+          '$emoji $label',
           style: TextStyle(
             fontSize: 13,
             color: selected ? Colors.white : Colors.black87,

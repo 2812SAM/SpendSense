@@ -14,9 +14,16 @@ import 'secure_storage_service.dart';
 
 class LocalStorageService {
   final String dbName;
-  LocalStorageService({this.dbName = AppConstants.dbName});
+  final DatabaseFactory? _factoryOverride;
 
-  static final LocalStorageService instance = LocalStorageService();
+  LocalStorageService({
+    this.dbName = AppConstants.dbName,
+    DatabaseFactory? databaseFactory,
+  }) : _factoryOverride = databaseFactory;
+
+  static LocalStorageService instance = LocalStorageService();
+
+  DatabaseFactory get _dbFactory => _factoryOverride ?? databaseFactory;
 
   Database? _db;
 
@@ -29,7 +36,7 @@ class LocalStorageService {
     String path;
     if (dbName == ':memory:') {
       path = inMemoryDatabasePath;
-      return databaseFactory.openDatabase(
+      return _dbFactory.openDatabase(
         path,
         options: OpenDatabaseOptions(
           version: AppConstants.dbVersion,
@@ -38,7 +45,7 @@ class LocalStorageService {
         ),
       );
     } else {
-      final dbPath = await databaseFactory.getDatabasesPath();
+      final dbPath = await _dbFactory.getDatabasesPath();
       path = join(dbPath, dbName);
     }
 
@@ -47,7 +54,7 @@ class LocalStorageService {
     await _checkAndEncryptExistingDatabase(path, password);
 
     if (password.isEmpty) {
-      return databaseFactory.openDatabase(
+      return _dbFactory.openDatabase(
         path,
         options: OpenDatabaseOptions(
           version: AppConstants.dbVersion,
@@ -69,12 +76,12 @@ class LocalStorageService {
   /// Ensures an existing unencrypted database is migrated to SQLCipher.
   Future<void> _checkAndEncryptExistingDatabase(
       String path, String password) async {
-    if (!await databaseFactory.databaseExists(path)) return;
+    if (!await _dbFactory.databaseExists(path)) return;
 
     Database? db;
     try {
       // Try opening without a password (plaintext check)
-      db = await databaseFactory.openDatabase(path);
+      db = await _dbFactory.openDatabase(path);
       // If we can read the version, it's unencrypted
       await db.rawQuery('PRAGMA user_version');
 
@@ -93,12 +100,13 @@ class LocalStorageService {
 
   Future<void> _encryptDatabase(String path, String password) async {
     final tempPath = join(dirname(path), 'temp_encrypted.db');
-    final db = await databaseFactory.openDatabase(path);
+    final db = await _dbFactory.openDatabase(path);
 
     // SQLCipher export pattern
-    await db.execute("ATTACH DATABASE ? AS encrypted KEY ?", [tempPath, password]);
+    await db
+        .execute('ATTACH DATABASE ? AS encrypted KEY ?', [tempPath, password]);
     await db.execute("SELECT sqlcipher_export('encrypted')");
-    await db.execute("DETACH DATABASE encrypted");
+    await db.execute('DETACH DATABASE encrypted');
     await db.close();
 
     // Replace original file with encrypted version

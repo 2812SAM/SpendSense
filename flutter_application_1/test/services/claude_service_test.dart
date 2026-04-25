@@ -20,7 +20,7 @@ void main() {
   setUp(() {
     mockClient = MockHttpClient();
     service = ClaudeService(client: mockClient);
-    
+
     // Set mock API key in SharedPreferences
     SharedPreferences.setMockInitialValues({
       AppConstants.prefClaudeApiKey: 'sk-ant-test-key',
@@ -45,10 +45,12 @@ void main() {
       };
 
       when(() => mockClient.post(
-            any(),
-            headers: any(named: 'headers'),
-            body: any(named: 'body'),
-          )).thenAnswer((_) async => http.Response(jsonEncode(mockResponse), 200));
+                any(),
+                headers: any(named: 'headers'),
+                body: any(named: 'body'),
+              ))
+          .thenAnswer(
+              (_) async => http.Response(jsonEncode(mockResponse), 200));
 
       final result = await service.categorise('Test SMS', ['Shopping', 'Food']);
 
@@ -60,10 +62,11 @@ void main() {
 
     test('should return null on 500 response', () async {
       when(() => mockClient.post(
-            any(),
-            headers: any(named: 'headers'),
-            body: any(named: 'body'),
-          )).thenAnswer((_) async => http.Response('Internal Server Error', 500));
+                any(),
+                headers: any(named: 'headers'),
+                body: any(named: 'body'),
+              ))
+          .thenAnswer((_) async => http.Response('Internal Server Error', 500));
 
       final result = await service.categorise('Test SMS', ['Shopping']);
 
@@ -86,17 +89,27 @@ void main() {
       };
 
       when(() => mockClient.post(
-            any(),
-            headers: any(named: 'headers'),
-            body: any(named: 'body'),
-          )).thenAnswer((_) async => http.Response(jsonEncode(mockResponse), 200));
+                any(),
+                headers: any(named: 'headers'),
+                body: any(named: 'body'),
+              ))
+          .thenAnswer(
+              (_) async => http.Response(jsonEncode(mockResponse), 200));
 
       final pending = MyTransaction(
-        id: '1', timestamp: DateTime.now(), amount: 100, merchant: 'Cafe',
-        category: 'Others', confidence: 'LOW', type: 'EXPENSE', note: '', rawSms: '',
+        id: '1',
+        timestamp: DateTime.now(),
+        amount: 100,
+        merchant: 'Cafe',
+        category: 'Others',
+        confidence: 'LOW',
+        type: 'EXPENSE',
+        note: '',
+        rawSms: '',
       );
 
-      final result = await service.understandVoiceNote('I ate lunch', pending, ['Food', 'Health']);
+      final result = await service
+          .understandVoiceNote('I ate lunch', pending, ['Food', 'Health']);
 
       expect(result['category'], 'Food');
       expect(result['note'], 'Lunch at Office');

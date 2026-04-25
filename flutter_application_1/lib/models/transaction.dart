@@ -163,7 +163,7 @@ class MyTransaction {
   static String _formatDate(DateTime dt) {
     final day = dt.day.toString().padLeft(2, '0');
     final month = dt.month.toString().padLeft(2, '0');
-    return '${dt.year}-${month}-${day}'; // Standard ISO format for Sheets
+    return '${dt.year}-$month-$day'; // Standard ISO format for Sheets
   }
 
   static String _formatTime(DateTime dt) {

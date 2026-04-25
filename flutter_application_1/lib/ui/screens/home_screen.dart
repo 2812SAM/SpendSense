@@ -136,7 +136,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 horizontal: 16,
                                 vertical: 3,
                               ),
-                              child: _AggregatedTransactionRow(tx: _recent[index]),
+                              child:
+                                  _AggregatedTransactionRow(tx: _recent[index]),
                             ),
                             childCount: _recent.length,
                           ),

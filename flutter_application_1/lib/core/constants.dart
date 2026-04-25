@@ -12,8 +12,7 @@ class AppConstants {
   // SharedPreferences keys
   static const String prefClaudeApiKey = 'claude_api_key';
   static const String prefWebhookUrl = 'webhook_url';
-  static const String legacyPrefWebhookUrl =
-      'https://script.google.com/macros/s/AKfycbxmPeL9lhYdbQ0tqaQ0s7rPjJKNGa00-CoK4YZGb3RC7poj2p_Koc6qrWZq8BARJk8w/exec';
+  static const String legacyPrefWebhookUrl = '';
   static const String prefOnboardingDone = 'onboarding_done';
   static const String prefDigestTime = 'digest_hour';
   static const String prefBackgroundSmsQueue = 'background_sms_queue';

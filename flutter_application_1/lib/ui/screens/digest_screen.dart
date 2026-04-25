@@ -21,7 +21,7 @@ class _DigestScreenState extends State<DigestScreen> {
   final Map<String, String> _selections = {};
   // Map of transactionId → isDynamic (Should we NOT remember this?)
   final Map<String, bool> _dynamicMap = {};
-  
+
   int _currentIndex = 0;
   bool _isSubmitting = false;
 
@@ -99,7 +99,6 @@ class _DigestScreenState extends State<DigestScreen> {
                 current: _currentIndex + 1,
                 total: transactions.length,
               ),
-
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -108,11 +107,11 @@ class _DigestScreenState extends State<DigestScreen> {
                     selectedCategory: _selections[currentTx.id],
                     isDynamic: _dynamicMap[currentTx.id] ?? false,
                     onCategoryTap: (cat) => _selectCategory(currentTx.id, cat),
-                    onRememberToggle: (rem) => _toggleRemember(currentTx.id, rem),
+                    onRememberToggle: (rem) =>
+                        _toggleRemember(currentTx.id, rem),
                   ),
                 ),
               ),
-
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -126,9 +125,7 @@ class _DigestScreenState extends State<DigestScreen> {
                         ),
                         child: const Text('Back'),
                       ),
-
                     const Spacer(),
-
                     if (_currentIndex < transactions.length - 1)
                       FilledButton(
                         onPressed: _selections.containsKey(currentTx.id)
@@ -292,12 +289,10 @@ class _DigestCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(_formatTimestamp(transaction.timestamp),
                   style: TextStyle(fontSize: 12, color: Colors.grey[400])),
-
               const SizedBox(height: 28),
               const Text('What was this for?',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
               const SizedBox(height: 14),
-
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -352,13 +347,12 @@ class _DigestCard extends StatelessWidget {
                   ),
                 ],
               ),
-              
               const SizedBox(height: 24),
               if (selectedCategory != null)
                 Row(
                   children: [
                     Checkbox(
-                      value: !isDynamic, 
+                      value: !isDynamic,
                       onChanged: (val) => onRememberToggle(val ?? true),
                     ),
                     const Expanded(

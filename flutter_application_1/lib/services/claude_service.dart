@@ -16,7 +16,7 @@ class ClaudeService {
   static final ClaudeService instance = ClaudeService();
 
   String _buildPrompt(String smsText, List<String> categories) {
-    final catList = categories.join(', ') + ', ASK_USER';
+    final catList = '${categories.join(', ')}, ASK_USER';
     return '''
 You are an expense categoriser for Indian UPI and bank transactions.
 Read the SMS below and return ONLY a valid JSON object. No explanation. No markdown. No code blocks.
@@ -45,7 +45,8 @@ Rules:
 ''';
   }
 
-  Future<MyTransaction?> categorise(String smsText, List<String> categories) async {
+  Future<MyTransaction?> categorise(
+      String smsText, List<String> categories) async {
     final apiKey = await _getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       return null;
@@ -84,7 +85,7 @@ Rules:
       };
     }
 
-    final catList = categories.join('|') + '|Loan';
+    final catList = '${categories.join('|')}|Loan';
     final prompt = '''
 A user made a payment of ₹${pending.amount} to "${pending.merchant}".
 The user said: "$voiceText"

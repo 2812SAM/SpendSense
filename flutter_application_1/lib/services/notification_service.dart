@@ -1,5 +1,6 @@
 /// SpendSense - Notification service.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -83,7 +84,7 @@ class NotificationService {
     // If app is in foreground, auto-open the popup for immediate feedback
     final nav = navigatorKey.currentState;
     if (nav != null) {
-      nav.pushNamed('/popup', arguments: transaction);
+      unawaited(nav.pushNamed('/popup', arguments: transaction));
     }
   }
 

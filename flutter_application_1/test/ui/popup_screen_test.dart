@@ -14,7 +14,8 @@ void main() {
   setUp(() {
     mockAppState = MockAppState();
     // Default stubs
-    when(() => mockAppState.allCategories).thenReturn(['Food', 'Transport', 'Shopping', 'Others']);
+    when(() => mockAppState.allCategories)
+        .thenReturn(['Food', 'Transport', 'Shopping', 'Others']);
     when(() => mockAppState.isVoiceListening).thenReturn(false);
   });
 
@@ -28,7 +29,8 @@ void main() {
   }
 
   group('PopupScreen - Learning Card', () {
-    testWidgets('should show standard Memory card for real merchants', (WidgetTester tester) async {
+    testWidgets('should show standard Memory card for real merchants',
+        (WidgetTester tester) async {
       final tx = MyTransaction(
         id: '1',
         timestamp: DateTime.now(),
@@ -50,15 +52,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Memory: Active'), findsOneWidget);
-      expect(find.textContaining('automatically categorize it as "Food"'), findsOneWidget);
+      expect(find.textContaining('automatically categorize it as "Food"'),
+          findsOneWidget);
       expect(find.byIcon(Icons.psychology_rounded), findsOneWidget);
-      
+
       // Verify switch is ON by default for real merchants
-      final Switch memorySwitch = tester.widget(find.byType(Switch));
+      final memorySwitch = tester.widget(find.byType(Switch)) as Switch;
       expect(memorySwitch.value, isTrue);
     });
 
-    testWidgets('should show Warning card for generic bank IDs', (WidgetTester tester) async {
+    testWidgets('should show Warning card for generic bank IDs',
+        (WidgetTester tester) async {
       final tx = MyTransaction(
         id: '2',
         timestamp: DateTime.now(),
@@ -78,12 +82,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify switch is OFF by default for generic IDs
-      Switch memorySwitch = tester.widget(find.byType(Switch));
+      var memorySwitch = tester.widget(find.byType(Switch)) as Switch;
       expect(memorySwitch.value, isFalse);
 
       // Warning should NOT be visible yet because memory is OFF
       expect(find.textContaining('Generic bank ID detected'), findsNothing);
-      expect(find.textContaining('This is a one-time categorization'), findsOneWidget);
+      expect(find.textContaining('This is a one-time categorization'),
+          findsOneWidget);
 
       // Now toggle it ON
       await tester.tap(find.byType(Switch));
@@ -92,8 +97,8 @@ void main() {
       // Now the warning SHOULD be visible
       expect(find.textContaining('Generic bank ID detected'), findsOneWidget);
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
-      
-      memorySwitch = tester.widget(find.byType(Switch));
+
+      memorySwitch = tester.widget(find.byType(Switch)) as Switch;
       expect(memorySwitch.value, isTrue);
     });
   });

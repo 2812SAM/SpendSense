@@ -9,3 +9,4 @@
 | SPEND-005 | Encrypt SQLite database with SQLCipher | [IN PROGRESS] | SecOps/FlutterDev | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
 | SPEND-006 | Setup GitHub Actions for automated testing | [TODO] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
 | SPEND-007 | Implement Idempotency in Google Sheets Sync | [TODO] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-008 | Implement Pre-Commit Hook (Lint, Format, Test, Secrets) | [TODO] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |

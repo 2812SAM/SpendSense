@@ -24,19 +24,26 @@ class LocalParserService {
   static final List<Map<String, dynamic>> _patterns = [
     {
       'name': 'HDFC',
-      'regex': RegExp(r'Rs\.?\s?([0-9,]+\.?[0-9]*)\s?at\s?(.*?)(?:\.|\son)', caseSensitive: false),
+      'regex': RegExp(r'Rs\.?\s?([0-9,]+\.?[0-9]*)\s?at\s?(.*?)(?:\.|\son)',
+          caseSensitive: false),
     },
     {
       'name': 'ICICI',
-      'regex': RegExp(r'INR\s?([0-9,]+\.?[0-9]*)\s?on.*?Info:\s?(.*?)\.?(?:\s|$)', caseSensitive: false),
+      'regex': RegExp(
+          r'INR\s?([0-9,]+\.?[0-9]*)\s?on.*?Info:\s?(.*?)\.?(?:\s|$)',
+          caseSensitive: false),
     },
     {
       'name': 'SBI',
-      'regex': RegExp(r'Transaction of Rs\.\s?([0-9,]+\.?[0-9]*)\son.*?to\s?(.*?)\.?(?:\s|$)', caseSensitive: false),
+      'regex': RegExp(
+          r'Transaction of Rs\.\s?([0-9,]+\.?[0-9]*)\son.*?to\s?(.*?)\.?(?:\s|$)',
+          caseSensitive: false),
     },
     {
       'name': 'Axis',
-      'regex': RegExp(r'INR\s?([0-9,]+\.?[0-9]*)\sdebited.*?for\s?UPI/P2M/(.*?)/', caseSensitive: false),
+      'regex': RegExp(
+          r'INR\s?([0-9,]+\.?[0-9]*)\sdebited.*?for\s?UPI/P2M/(.*?)/',
+          caseSensitive: false),
     },
   ];
 
@@ -62,9 +69,9 @@ class LocalParserService {
         final amountStr = match.group(1)?.replaceAll(',', '') ?? '0';
         final amount = double.tryParse(amountStr) ?? 0.0;
         final rawMerchant = match.group(2)?.trim() ?? 'Unknown';
-        
+
         // Try to categorize based on merchant keywords
-        String category = 'Others';
+        var category = 'Others';
         final lowerMerchant = rawMerchant.toLowerCase();
         for (final entry in _merchantCategories.entries) {
           if (lowerMerchant.contains(entry.key)) {
@@ -80,7 +87,7 @@ class LocalParserService {
         );
       }
     }
-    
+
     return null;
   }
 }

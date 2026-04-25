@@ -20,7 +20,7 @@ void main() {
   setUp(() {
     mockClient = MockHttpClient();
     service = SheetsService(client: mockClient);
-    
+
     SharedPreferences.setMockInitialValues({
       AppConstants.prefWebhookUrl: 'https://mock.webhook.com',
     });
@@ -29,15 +29,24 @@ void main() {
   group('SheetsService - logMyTransaction', () {
     test('should return true on successful sync', () async {
       final tx = MyTransaction(
-        id: '1', timestamp: DateTime.now(), amount: 100, merchant: 'Test',
-        category: 'Others', confidence: 'HIGH', type: 'EXPENSE', note: '', rawSms: '',
+        id: '1',
+        timestamp: DateTime.now(),
+        amount: 100,
+        merchant: 'Test',
+        category: 'Others',
+        confidence: 'HIGH',
+        type: 'EXPENSE',
+        note: '',
+        rawSms: '',
       );
 
       when(() => mockClient.post(
-            any(),
-            headers: any(named: 'headers'),
-            body: any(named: 'body'),
-          )).thenAnswer((_) async => http.Response(jsonEncode({'status': 'success'}), 200));
+                any(),
+                headers: any(named: 'headers'),
+                body: any(named: 'body'),
+              ))
+          .thenAnswer((_) async =>
+              http.Response(jsonEncode({'status': 'success'}), 200));
 
       final result = await service.logMyTransaction(tx);
       expect(result, isTrue);
@@ -45,8 +54,15 @@ void main() {
 
     test('should return false on server error', () async {
       final tx = MyTransaction(
-        id: '1', timestamp: DateTime.now(), amount: 100, merchant: 'Test',
-        category: 'Others', confidence: 'HIGH', type: 'EXPENSE', note: '', rawSms: '',
+        id: '1',
+        timestamp: DateTime.now(),
+        amount: 100,
+        merchant: 'Test',
+        category: 'Others',
+        confidence: 'HIGH',
+        type: 'EXPENSE',
+        note: '',
+        rawSms: '',
       );
 
       when(() => mockClient.post(
@@ -63,10 +79,12 @@ void main() {
   group('SheetsService - testWebhook', () {
     test('should return true when webhook responds success', () async {
       when(() => mockClient.post(
-            any(),
-            headers: any(named: 'headers'),
-            body: any(named: 'body'),
-          )).thenAnswer((_) async => http.Response(jsonEncode({'status': 'success'}), 200));
+                any(),
+                headers: any(named: 'headers'),
+                body: any(named: 'body'),
+              ))
+          .thenAnswer((_) async =>
+              http.Response(jsonEncode({'status': 'success'}), 200));
 
       final result = await service.testWebhook('https://test.com');
       expect(result, isTrue);

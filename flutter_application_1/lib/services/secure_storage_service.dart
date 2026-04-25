@@ -27,7 +27,7 @@ class SecureStorageService {
 
   /// Gets the database encryption key or generates one if it doesn't exist.
   Future<String> getDatabaseKey() async {
-    String? key = await readSecret(AppConstants.dbEncryptionKey);
+    var key = await readSecret(AppConstants.dbEncryptionKey);
     if (key == null || key.isEmpty) {
       key = _generateRandomKey();
       await saveSecret(AppConstants.dbEncryptionKey, key);
@@ -44,7 +44,7 @@ class SecureStorageService {
   /// Migrates secrets from SharedPreferences to SecureStorage if they exist.
   Future<void> migrateFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Migrate API Key
     final apiKey = prefs.getString(AppConstants.prefClaudeApiKey);
     if (apiKey != null && apiKey.isNotEmpty) {

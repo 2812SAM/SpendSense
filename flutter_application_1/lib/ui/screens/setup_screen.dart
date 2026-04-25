@@ -1,5 +1,6 @@
 /// SpendSense - Setup / settings screen.
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,10 +46,10 @@ class _SetupScreenState extends State<SetupScreen> {
     // Attempt migration in case AppState hasn't run yet
     await secure.migrateFromPrefs();
 
-
-
-    _apiKeyCtrl.text = await secure.readSecret(AppConstants.prefClaudeApiKey) ?? '';
-    _webhookCtrl.text = await secure.readSecret(AppConstants.prefWebhookUrl) ?? '';
+    _apiKeyCtrl.text =
+        await secure.readSecret(AppConstants.prefClaudeApiKey) ?? '';
+    _webhookCtrl.text =
+        await secure.readSecret(AppConstants.prefWebhookUrl) ?? '';
 
     if (mounted) setState(() {});
   }
@@ -151,6 +152,7 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() => _isSaving = false);
 
     if (widget.isOnboarding) {
+      // ignore: unawaited_futures
       Navigator.of(context).pushReplacementNamed('/home');
       return;
     }
@@ -203,7 +205,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         controller: _apiKeyCtrl,
                         obscureText: true,
                         decoration: const InputDecoration(
-                          hintText: 'sk-ant-api03-... (Optional)',
+                          hintText: 'Enter Claude API Key (Optional)',
                           border: OutlineInputBorder(),
                           isDense: true,
                           suffixIcon: Icon(Icons.vpn_key_outlined, size: 18),
@@ -333,10 +335,13 @@ class _SetupScreenState extends State<SetupScreen> {
                   const SizedBox(height: 16),
                   const Divider(),
                   ListTile(
-                    leading: const Icon(Icons.bug_report_outlined, color: Colors.orange),
+                    leading: const Icon(Icons.bug_report_outlined,
+                        color: Colors.orange),
                     title: const Text('Developer Options'),
-                    subtitle: const Text('Simulate SMS and test sync reliability'),
+                    subtitle:
+                        const Text('Simulate SMS and test sync reliability'),
                     trailing: const Icon(Icons.chevron_right),
+                    // ignore: unawaited_futures
                     onTap: () => Navigator.pushNamed(context, '/debug'),
                   ),
                 ],

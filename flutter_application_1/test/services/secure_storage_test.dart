@@ -14,7 +14,7 @@ void main() {
   setUp(() {
     mockSecureStorage = MockFlutterSecureStorage();
     service = SecureStorageService(storage: mockSecureStorage);
-    
+
     // Stubbing write and read
     when(() => mockSecureStorage.write(
           key: any(named: 'key'),
@@ -22,7 +22,9 @@ void main() {
         )).thenAnswer((_) async => {});
   });
 
-  test('migrateFromPrefs should move data from SharedPreferences to SecureStorage', () async {
+  test(
+      'migrateFromPrefs should move data from SharedPreferences to SecureStorage',
+      () async {
     const testApiKey = 'sk-ant-test-key';
     const testWebhook = 'https://test.webhook.com';
 

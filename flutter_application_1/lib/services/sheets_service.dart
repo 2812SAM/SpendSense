@@ -71,7 +71,8 @@ class SheetsService {
   }
 
   Future<void> saveWebhookUrl(String url) async {
-    await SecureStorageService.instance.saveSecret(AppConstants.prefWebhookUrl, url);
+    await SecureStorageService.instance
+        .saveSecret(AppConstants.prefWebhookUrl, url);
   }
 
   Future<bool> testWebhook(String url) async {
