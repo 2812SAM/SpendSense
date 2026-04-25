@@ -4,14 +4,19 @@ import 'package:mocktail/mocktail.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spendsense/services/claude_service.dart';
+import 'package:spendsense/services/secure_storage_service.dart';
 import 'package:spendsense/core/constants.dart';
 import 'package:spendsense/models/transaction.dart';
 
 class MockHttpClient extends Mock implements http.Client {}
 
+class MockSecureStorageService extends Mock implements SecureStorageService {}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late ClaudeService service;
   late MockHttpClient mockClient;
+  late MockSecureStorageService mockSecure;
 
   setUpAll(() {
     registerFallbackValue(Uri.parse('https://example.com'));
@@ -19,9 +24,15 @@ void main() {
 
   setUp(() {
     mockClient = MockHttpClient();
-    service = ClaudeService(client: mockClient);
+    mockSecure = MockSecureStorageService();
+    service = ClaudeService(client: mockClient, secure: mockSecure);
 
-    // Set mock API key in SharedPreferences
+    // Stub secure storage to return the API key
+    when(() => mockSecure.readSecret(any())).thenAnswer((_) async => null);
+    when(() => mockSecure.readSecret(AppConstants.prefClaudeApiKey))
+        .thenAnswer((_) async => 'sk-ant-test-key');
+
+    // Set mock API key in SharedPreferences (as fallback)
     SharedPreferences.setMockInitialValues({
       AppConstants.prefClaudeApiKey: 'sk-ant-test-key',
     });

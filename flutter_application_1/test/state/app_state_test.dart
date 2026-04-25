@@ -108,10 +108,7 @@ void main() {
         fingerprint: any(named: 'fingerprint'))).thenAnswer((_) async => {});
     when(() => mockNotif.showTransactionPopup(any()))
         .thenAnswer((_) async => {});
-    when(() => mockNotif.dismissTransactionNotification())
-        .thenAnswer((_) async => {});
-
-    when(() => mockNotif.dismissTransactionNotification())
+    when(() => mockNotif.dismissTransactionNotification(any()))
         .thenAnswer((_) async => {});
 
     when(() => mockLocal.markConfirmed(any(),
@@ -309,7 +306,7 @@ void main() {
     verify(() => mockLocal.saveMerchantMemory(
         'Cafe', 'Food', AppConstants.typeExpense,
         isDynamic: false)).called(1);
-    verify(() => mockNotif.dismissTransactionNotification()).called(1);
+    verify(() => mockNotif.dismissTransactionNotification(tx.id)).called(1);
     verify(() => mockSheets.logMyTransaction(any())).called(1);
   });
 }

@@ -210,7 +210,7 @@ class SmsOrchestrator {
       resolvedType,
       isDynamic: isDynamic,
     );
-    await _notif.dismissTransactionNotification();
+    await _notif.dismissTransactionNotification(transaction.id);
     await _sync.syncTransaction(confirmed);
   }
 

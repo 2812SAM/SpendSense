@@ -20,7 +20,9 @@ class SheetsService {
   })  : _client = client ?? http.Client(),
         _secure = secure ?? SecureStorageService.instance;
 
-  static final SheetsService instance = SheetsService();
+  static final SheetsService instance = SheetsService(
+    secure: SecureStorageService.instance,
+  );
 
   bool debugForceFail = false;
 
@@ -81,8 +83,7 @@ class SheetsService {
   }
 
   Future<void> saveWebhookUrl(String url) async {
-    await SecureStorageService.instance
-        .saveSecret(AppConstants.prefWebhookUrl, url);
+    await _secure.saveSecret(AppConstants.prefWebhookUrl, url);
   }
 
   Future<bool> testWebhook(String url) async {

@@ -17,7 +17,9 @@ class ClaudeService {
   })  : _client = client ?? http.Client(),
         _secure = secure ?? SecureStorageService.instance;
 
-  static final ClaudeService instance = ClaudeService();
+  static final ClaudeService instance = ClaudeService(
+    secure: SecureStorageService.instance,
+  );
 
   String _buildPrompt(String smsText, List<String> categories) {
     final catList = '${categories.join(', ')}, ASK_USER';
