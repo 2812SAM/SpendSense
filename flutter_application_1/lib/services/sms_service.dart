@@ -108,13 +108,12 @@ class SmsService {
 
 @pragma('vm:entry-point')
 Future<void> _backgroundSmsHandler(SmsMessage message) async {
-  // Use debugPrint instead of print as it's more reliable in some isolate environments
   debugPrint('SpendSense: Background Isolate Waking Up...');
-  
+
   try {
     WidgetsFlutterBinding.ensureInitialized();
     DartPluginRegistrant.ensureInitialized();
-    
+
     final body = message.body ?? '';
     final sender = message.address ?? '';
     debugPrint('SpendSense: SMS Received from $sender');
@@ -124,46 +123,74 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
       return;
     }
 
-    debugPrint('SpendSense: SMS identified as payment. Initializing services...');
+    final prefs = await SharedPreferences.getInstance();
 
-    // 1. Initialize Headless Services
-    final secureStorage = SecureStorageService.instance;
-    final localStorage = LocalStorageService(isBackground: true);
-    final notificationService = NotificationService.instance;
-    final claudeService = ClaudeService.instance;
-    final voiceService = VoiceService.instance;
-    final localParser = LocalParserService.instance;
+    // SPEND-013: Simple Mutex to prevent simultaneous DB/Prefs access
+    final isProcessing = prefs.getBool('is_processing_sms') ?? false;
+    if (isProcessing) {
+      debugPrint('SpendSense: Background already busy. Queuing SMS for later.');
+      final queue =
+          prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
+      queue.add(jsonEncode({
+        'body': body,
+        'sender': sender,
+        'received_at': DateTime.now().millisecondsSinceEpoch,
+      }));
+      await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, queue);
+      return;
+    }
 
-    // 2. Open Secure Database
-    debugPrint('SpendSense: Unlocking secure database in background...');
-    await localStorage.database;
-    debugPrint('SpendSense: Database unlocked.');
+    // Set Lock
+    await prefs.setBool('is_processing_sms', true);
 
-    // Initialize notifications for transaction popups
-    await notificationService.initialise();
+    try {
+      debugPrint('SpendSense: Initializing headless services...');
+      // 1. Initialize Headless Services
+      final secureStorage = SecureStorageService.instance;
+      final localStorage = LocalStorageService(isBackground: true);
+      final notificationService = NotificationService.instance;
+      final claudeService = ClaudeService.instance;
+      final voiceService = VoiceService.instance;
+      final localParser = LocalParserService.instance;
 
-    // 3. Fetch categories (Core + User Defined)
-    final customCategories = await localStorage.getCustomCategories();
-    final allCategories = [
-      ...AppConstants.defaultCategories,
-      ...customCategories
-    ];
+      // 2. Open Secure Database
+      debugPrint('SpendSense: Unlocking secure database in background...');
+      await localStorage.database;
+      debugPrint('SpendSense: Database unlocked.');
 
-    // 4. Initialize Orchestrator with Background-Safe Sync
-    final orchestrator = SmsOrchestrator(
-      claude: claudeService,
-      local: localStorage,
-      notif: notificationService,
-      localParser: localParser,
-      secure: secureStorage,
-      sync: _BackgroundNoOpSyncService(local: localStorage),
-      voice: voiceService,
-    );
+      // Initialize notifications for transaction popups
+      await notificationService.initialise();
 
-    // 5. Run full waterfall logic
-    debugPrint('SpendSense: Starting waterfall processing...');
-    await orchestrator.processSms(body, sender, allCategories: allCategories);
-    debugPrint('SpendSense: Background processing completed successfully.');
+      // 3. Fetch categories (Core + User Defined)
+      final customCategories = await localStorage.getCustomCategories();
+      final allCategories = [
+        ...AppConstants.defaultCategories,
+        ...customCategories
+      ];
+
+      // 4. Initialize Orchestrator with Background-Safe Sync
+      final orchestrator = SmsOrchestrator(
+        claude: claudeService,
+        local: localStorage,
+        notif: notificationService,
+        localParser: localParser,
+        secure: secureStorage,
+        sync: _BackgroundNoOpSyncService(local: localStorage),
+        voice: voiceService,
+      );
+
+      // 5. Run full waterfall logic
+      debugPrint('SpendSense: Starting waterfall processing...');
+      await orchestrator.processSms(body, sender, allCategories: allCategories);
+      debugPrint('SpendSense: Background processing completed successfully.');
+
+      // Also process any previously queued messages while we have the DB open
+      await _processQueuedMessagesHeadless(orchestrator, allCategories);
+
+    } finally {
+      // Release Lock
+      await prefs.setBool('is_processing_sms', false);
+    }
 
   } catch (e, stack) {
     debugPrint('SpendSense CRITICAL: Background processing failed: $e');
@@ -184,6 +211,36 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
     } catch (e2) {
       debugPrint('SpendSense: Fatal error during fallback queuing: $e2');
     }
+  }
+}
+
+Future<void> _processQueuedMessagesHeadless(
+    SmsOrchestrator orchestrator, List<String> allCategories) async {
+  final prefs = await SharedPreferences.getInstance();
+  final queue = prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
+  if (queue.isEmpty) return;
+
+  debugPrint('SpendSense: Processing ${queue.length} queued messages in background...');
+  await prefs.remove(AppConstants.prefBackgroundSmsQueue);
+  
+  final failed = <String>[];
+
+  for (final entry in queue) {
+    try {
+      final payload = jsonDecode(entry) as Map<String, dynamic>;
+      final body = payload['body'] as String? ?? '';
+      final sender = payload['sender'] as String? ?? '';
+
+      if (!SmsService.isPaymentSms(body)) continue;
+      await orchestrator.processSms(body, sender, allCategories: allCategories);
+    } catch (e) {
+      debugPrint('SpendSense: Headless retry failed: $e');
+      failed.add(entry);
+    }
+  }
+
+  if (failed.isNotEmpty) {
+    await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, failed);
   }
 }
 

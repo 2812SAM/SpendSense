@@ -23,6 +23,12 @@ class LocalParserService {
   // Common Indian Bank SMS Patterns
   static final List<Map<String, dynamic>> _patterns = [
     {
+      'name': 'ICICI V2',
+      'regex': RegExp(
+          r'(?:Rs\.?|INR)\s?([0-9,]+\.?[0-9]*)\s(?:debited|spent).*?for\s?([^.]+?)\.',
+          caseSensitive: false),
+    },
+    {
       'name': 'HDFC',
       'regex': RegExp(r'Rs\.?\s?([0-9,]+\.?[0-9]*)\s?at\s?(.*?)(?:\.|\son)',
           caseSensitive: false),

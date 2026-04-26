@@ -90,35 +90,39 @@ class LocalStorageService {
     }
 
     try {
-      return await openDatabase(
-        path,
-        password: password,
-        version: AppConstants.dbVersion,
-        onCreate: _onCreate,
-        onUpgrade: _onUpgrade,
-      );
+      return await _openAndKeyDatabase(path, password);
     } catch (e) {
       if (isBackground) {
-        // In background mode, we skip nuclear recovery and just throw.
-        // This prevents race conditions with the UI thread.
-        rethrow;
+        debugPrint(
+            'SpendSense SecOps: Background DB open failed (likely locked). Retrying in 1s...');
+        await Future.delayed(const Duration(seconds: 1));
+        try {
+          return await _openAndKeyDatabase(path, password);
+        } catch (e2) {
+          debugPrint('SpendSense SecOps: Background DB retry failed: $e2');
+          rethrow;
+        }
       }
       debugPrint('SpendSense SecOps: Failed to open encrypted database: $e');
-      // Final fallback: If openDatabase fails even after the check/migration,
+      // Final fallback: If openDatabase fails even after the check/migration, 
       // the file is likely corrupted beyond repair. Delete and start fresh.
       if (await _dbFactory.databaseExists(path)) {
         await _dbFactory.deleteDatabase(path);
         debugPrint(
             'SpendSense SecOps: Nuclear recovery triggered. Starting fresh.');
       }
-      return openDatabase(
-        path,
-        password: password,
-        version: AppConstants.dbVersion,
-        onCreate: _onCreate,
-        onUpgrade: _onUpgrade,
-      );
+      return await _openAndKeyDatabase(path, password);
     }
+  }
+
+  Future<Database> _openAndKeyDatabase(String path, String password) {
+    return openDatabase(
+      path,
+      password: password,
+      version: AppConstants.dbVersion,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   /// Ensures an existing unencrypted database is migrated to SQLCipher.
