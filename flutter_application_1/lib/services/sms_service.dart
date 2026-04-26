@@ -122,7 +122,7 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
   try {
     // 1. Initialize Headless Services
     final secureStorage = SecureStorageService.instance;
-    final localStorage = LocalStorageService.instance;
+    final localStorage = LocalStorageService(isBackground: true);
     final notificationService = NotificationService.instance;
     final claudeService = ClaudeService.instance;
     final voiceService = VoiceService.instance;

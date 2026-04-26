@@ -14,11 +14,13 @@ import 'secure_storage_service.dart';
 
 class LocalStorageService {
   final String dbName;
+  final bool isBackground;
   final DatabaseFactory? _factoryOverride;
 
   LocalStorageService({
     this.dbName = AppConstants.dbName,
     DatabaseFactory? databaseFactory,
+    this.isBackground = false,
   }) : _factoryOverride = databaseFactory;
 
   static LocalStorageService instance = LocalStorageService();
@@ -63,14 +65,16 @@ class LocalStorageService {
     // Secure database with SQLCipher
     final password = await SecureStorageService.instance.getDatabaseKey();
 
-    try {
-      await _checkAndEncryptExistingDatabase(path, password);
-    } catch (e) {
-      debugPrint('SpendSense SecOps: Database migration/check failed: $e');
-      if (await _dbFactory.databaseExists(path)) {
-        await _dbFactory.deleteDatabase(path);
-        debugPrint(
-            'SpendSense SecOps: Corrupted/Inaccessible DB deleted for recovery.');
+    if (!isBackground) {
+      try {
+        await _checkAndEncryptExistingDatabase(path, password);
+      } catch (e) {
+        debugPrint('SpendSense SecOps: Database migration/check failed: $e');
+        if (await _dbFactory.databaseExists(path)) {
+          await _dbFactory.deleteDatabase(path);
+          debugPrint(
+              'SpendSense SecOps: Corrupted/Inaccessible DB deleted for recovery.');
+        }
       }
     }
 
@@ -94,6 +98,11 @@ class LocalStorageService {
         onUpgrade: _onUpgrade,
       );
     } catch (e) {
+      if (isBackground) {
+        // In background mode, we skip nuclear recovery and just throw.
+        // This prevents race conditions with the UI thread.
+        rethrow;
+      }
       debugPrint('SpendSense SecOps: Failed to open encrypted database: $e');
       // Final fallback: If openDatabase fails even after the check/migration,
       // the file is likely corrupted beyond repair. Delete and start fresh.
