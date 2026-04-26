@@ -5,7 +5,6 @@
 import 'dart:convert';
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telephony/telephony.dart';
@@ -68,7 +67,7 @@ class SmsService {
         final body = payload['body'] as String? ?? '';
         final sender = payload['sender'] as String? ?? '';
 
-        if (!_isPaymentSms(body) || _callback == null) continue;
+        if (!isPaymentSms(body) || _callback == null) continue;
         await _callback!.call(body, sender);
       } catch (_) {
         failed.add(entry);
@@ -84,7 +83,7 @@ class SmsService {
     final body = message.body ?? '';
     final sender = message.address ?? '';
 
-    if (_isPaymentSms(body) && _callback != null) {
+    if (isPaymentSms(body) && _callback != null) {
       _callback!.call(body, sender);
     }
   }
