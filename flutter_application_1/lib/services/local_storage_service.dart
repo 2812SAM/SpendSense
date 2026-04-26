@@ -26,10 +26,21 @@ class LocalStorageService {
   DatabaseFactory get _dbFactory => _factoryOverride ?? databaseFactory;
 
   Database? _db;
+  Future<Database>? _dbFuture;
 
   Future<Database> get database async {
-    _db ??= await _initDatabase();
-    return _db!;
+    if (_db != null && _db!.isOpen) return _db!;
+
+    // Memoize the initialization future to prevent concurrent calls
+    _dbFuture ??= _initDatabase();
+
+    try {
+      _db = await _dbFuture;
+      return _db!;
+    } catch (e) {
+      _dbFuture = null; // Reset on failure so we can retry
+      rethrow;
+    }
   }
 
   Future<Database> _initDatabase() async {
@@ -51,7 +62,17 @@ class LocalStorageService {
 
     // Secure database with SQLCipher
     final password = await SecureStorageService.instance.getDatabaseKey();
-    await _checkAndEncryptExistingDatabase(path, password);
+
+    try {
+      await _checkAndEncryptExistingDatabase(path, password);
+    } catch (e) {
+      debugPrint('SpendSense SecOps: Database migration/check failed: $e');
+      if (await _dbFactory.databaseExists(path)) {
+        await _dbFactory.deleteDatabase(path);
+        debugPrint(
+            'SpendSense SecOps: Corrupted/Inaccessible DB deleted for recovery.');
+      }
+    }
 
     if (password.isEmpty) {
       return _dbFactory.openDatabase(
@@ -64,13 +85,31 @@ class LocalStorageService {
       );
     }
 
-    return openDatabase(
-      path,
-      password: password,
-      version: AppConstants.dbVersion,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
+    try {
+      return await openDatabase(
+        path,
+        password: password,
+        version: AppConstants.dbVersion,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+    } catch (e) {
+      debugPrint('SpendSense SecOps: Failed to open encrypted database: $e');
+      // Final fallback: If openDatabase fails even after the check/migration,
+      // the file is likely corrupted beyond repair. Delete and start fresh.
+      if (await _dbFactory.databaseExists(path)) {
+        await _dbFactory.deleteDatabase(path);
+        debugPrint(
+            'SpendSense SecOps: Nuclear recovery triggered. Starting fresh.');
+      }
+      return openDatabase(
+        path,
+        password: password,
+        version: AppConstants.dbVersion,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+    }
   }
 
   /// Ensures an existing unencrypted database is migrated to SQLCipher.
