@@ -5,11 +5,21 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telephony/telephony.dart';
 
 import '../core/constants.dart';
+import '../models/transaction.dart';
+import 'claude_service.dart';
+import 'local_parser_service.dart';
+import 'local_storage_service.dart';
+import 'notification_service.dart';
+import 'secure_storage_service.dart';
+import 'sms_orchestrator.dart';
+import 'sync_service.dart';
+import 'voice_service.dart';
 
 typedef OnPaymentSmsReceived = Future<void> Function(
     String smsBody, String sender);
@@ -109,12 +119,79 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
     return;
   }
 
-  final prefs = await SharedPreferences.getInstance();
-  final queue = prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
-  queue.add(jsonEncode({
-    'body': body,
-    'sender': sender,
-    'received_at': DateTime.now().millisecondsSinceEpoch,
-  }));
-  await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, queue);
+  try {
+    // 1. Initialize Headless Services
+    final secureStorage = SecureStorageService.instance;
+    final localStorage = LocalStorageService.instance;
+    final notificationService = NotificationService.instance;
+    final claudeService = ClaudeService.instance;
+    final voiceService = VoiceService.instance;
+    final localParser = LocalParserService.instance;
+
+    // 2. Open Secure Database
+    // Rule 5: Ensure the database key is correctly retrieved for SQLCipher.
+    // Calling 'database' getter triggers _initDatabase which fetches the key.
+    await localStorage.database;
+
+    // Initialize notifications for transaction popups
+    await notificationService.initialise();
+
+    // 3. Fetch categories (Core + User Defined)
+    final customCategories = await localStorage.getCustomCategories();
+    final allCategories = [
+      ...AppConstants.defaultCategories,
+      ...customCategories
+    ];
+
+    // 4. Initialize Orchestrator with Background-Safe Sync
+    // Rule 4: DO NOT trigger Google Sheets sync in the background.
+    final orchestrator = SmsOrchestrator(
+      claude: claudeService,
+      local: localStorage,
+      notif: notificationService,
+      localParser: localParser,
+      secure: secureStorage,
+      sync: _BackgroundNoOpSyncService(local: localStorage),
+      voice: voiceService,
+    );
+
+    // 5. Run full waterfall logic
+    // Rule 3: Call orchestrator.processSms() inside the handler.
+    await orchestrator.processSms(body, sender, allCategories: allCategories);
+
+    if (kDebugMode) {
+      print('SpendSense: Background SMS processed successfully: $body');
+    }
+  } catch (e, stack) {
+    debugPrint('SpendSense SecOps: Background processing failed: $e');
+    if (kDebugMode) debugPrint(stack.toString());
+
+    // Fallback: Queue for foreground processing if background fails
+    final prefs = await SharedPreferences.getInstance();
+    final queue = prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
+    queue.add(jsonEncode({
+      'body': body,
+      'sender': sender,
+      'received_at': DateTime.now().millisecondsSinceEpoch,
+    }));
+    await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, queue);
+  }
+}
+
+/// Specialized SyncService for background processing.
+/// Prevents expensive network calls to Google Sheets to save battery and data.
+class _BackgroundNoOpSyncService extends SyncService {
+  _BackgroundNoOpSyncService({super.local});
+
+  @override
+  Future<bool> syncTransaction(MyTransaction transaction) async {
+    // Return false to keep status as 'pending'.
+    // The orchestrator will already have saved it to SQLite.
+    return false;
+  }
+
+  @override
+  Future<void> retryUnsyncedTransactions() async {
+    // No-op to avoid background network activity.
+  }
 }
