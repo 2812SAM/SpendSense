@@ -72,27 +72,32 @@ class AppState extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   Future<void> initialise() async {
-    await _local.database;
-    await _secure.migrateFromPrefs();
-    _notificationsReady = await _notif.initialise();
-    await _voice.initialise();
-    _isSmsReady = await _sms.initialise(_onPaymentSmsReceived);
-    _customCategories = await _local.getCustomCategories();
-    await _sms.processQueuedMessages();
-    await _sync.retryUnsyncedTransactions();
-    await _loadPendingMyTransactions();
+    try {
+      await _local.database;
+      await _secure.migrateFromPrefs();
+      _notificationsReady = await _notif.initialise();
+      await _voice.initialise();
+      _isSmsReady = await _sms.initialise(_onPaymentSmsReceived);
+      _customCategories = await _local.getCustomCategories();
+      await _sms.processQueuedMessages();
+      await _sync.retryUnsyncedTransactions();
+      await _loadPendingMyTransactions();
 
-    if (!_isSmsReady) {
-      _errorMessage =
-          'SMS permission is required before SpendSense can listen in the background.';
+      if (!_isSmsReady) {
+        _errorMessage =
+            'SMS permission is required before SpendSense can listen in the background.';
+      }
+
+      if (!_notificationsReady) {
+        _errorMessage ??=
+            'Notification permission is recommended so SpendSense can prompt for low-confidence transactions.';
+      }
+    } catch (e) {
+      debugPrint('SpendSense Critical Error during init: $e');
+      _errorMessage = 'Application failed to start correctly: $e';
+    } finally {
+      notifyListeners();
     }
-
-    if (!_notificationsReady) {
-      _errorMessage ??=
-          'Notification permission is recommended so SpendSense can prompt for low-confidence transactions.';
-    }
-
-    notifyListeners();
   }
 
   @visibleForTesting

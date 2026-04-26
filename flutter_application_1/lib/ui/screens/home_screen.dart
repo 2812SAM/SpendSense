@@ -55,19 +55,32 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _loading = true);
     }
 
-    final service = RecentTransactionsService.instance;
-    final recent = await service.fetchAggregatedRecent();
-    final summary = await service.fetchMonthlySummary();
+    try {
+      final service = RecentTransactionsService.instance;
+      final recent = await service.fetchAggregatedRecent();
+      final summary = await service.fetchMonthlySummary();
 
-    if (mounted) {
-      setState(() {
-        _recent = recent;
-        _summary = summary;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _recent = recent;
+          _summary = summary;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('SpendSense Error: Failed to load home data: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to load transactions. Please restart.'),
+            backgroundColor: Colors.red[700],
+          ),
+        );
+      }
+    } finally {
+      _reloadInFlight = false;
     }
-
-    _reloadInFlight = false;
   }
 
   @override
