@@ -21,13 +21,8 @@ class LocalParserService {
   static final LocalParserService instance = LocalParserService._();
 
   // Common Indian Bank SMS Patterns
+  // Order matters: More specific patterns should come before generic fallbacks.
   static final List<Map<String, dynamic>> _patterns = [
-    {
-      'name': 'ICICI V2',
-      'regex': RegExp(
-          r'(?:Rs\.?|INR)\s?([0-9,]+\.?[0-9]*)\s(?:debited|spent).*?for\s?([^.]+?)\.',
-          caseSensitive: false),
-    },
     {
       'name': 'HDFC',
       'regex': RegExp(r'Rs\.?\s?([0-9,]+\.?[0-9]*)\s?at\s?(.*?)(?:\.|\son)',
@@ -49,6 +44,12 @@ class LocalParserService {
       'name': 'Axis',
       'regex': RegExp(
           r'INR\s?([0-9,]+\.?[0-9]*)\sdebited.*?for\s?UPI/P2M/(.*?)/',
+          caseSensitive: false),
+    },
+    {
+      'name': 'ICICI V2 (Generic Fallback)',
+      'regex': RegExp(
+          r'(?:Rs\.?|INR)\s?([0-9,]+\.?[0-9]*)\s(?:debited|spent).*?for\s?([^.]+?)\.',
           caseSensitive: false),
     },
   ];

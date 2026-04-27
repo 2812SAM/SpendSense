@@ -104,7 +104,7 @@ class LocalStorageService {
         }
       }
       debugPrint('SpendSense SecOps: Failed to open encrypted database: $e');
-      // Final fallback: If openDatabase fails even after the check/migration, 
+      // Final fallback: If openDatabase fails even after the check/migration,
       // the file is likely corrupted beyond repair. Delete and start fresh.
       if (await _dbFactory.databaseExists(path)) {
         await _dbFactory.deleteDatabase(path);

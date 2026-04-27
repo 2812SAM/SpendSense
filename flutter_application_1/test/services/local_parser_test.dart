@@ -46,6 +46,17 @@ void main() {
       expect(result.merchant, 'VPS*Swiggy');
       expect(result.category, 'Food');
     });
+
+    test('should parse ICICI V2 format for Zomato (User Reported)', () {
+      const sms =
+          'ICICI Bank: Rs 250.00 debited from A/c XX1234 on 26-Apr-26 for ZOMATO. Ref No: 324567891234. Avl Bal: Rs XX,XXX.XX.';
+      final result = parser.parse(sms);
+
+      expect(result, isNotNull);
+      expect(result!.amount, 250.00);
+      expect(result.merchant, 'ZOMATO');
+      expect(result.category, 'Food');
+    });
   });
 
   group('LocalParserService - SBI Bank', () {

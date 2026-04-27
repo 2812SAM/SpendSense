@@ -186,12 +186,10 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
 
       // Also process any previously queued messages while we have the DB open
       await _processQueuedMessagesHeadless(orchestrator, allCategories);
-
     } finally {
       // Release Lock
       await prefs.setBool('is_processing_sms', false);
     }
-
   } catch (e, stack) {
     debugPrint('SpendSense CRITICAL: Background processing failed: $e');
     debugPrint(stack.toString());
@@ -199,7 +197,8 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
     // Fallback: Queue for foreground processing if background fails
     try {
       final prefs = await SharedPreferences.getInstance();
-      final queue = prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
+      final queue =
+          prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
       queue.add(jsonEncode({
         'body': message.body,
         'sender': message.address,
@@ -220,9 +219,10 @@ Future<void> _processQueuedMessagesHeadless(
   final queue = prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
   if (queue.isEmpty) return;
 
-  debugPrint('SpendSense: Processing ${queue.length} queued messages in background...');
+  debugPrint(
+      'SpendSense: Processing ${queue.length} queued messages in background...');
   await prefs.remove(AppConstants.prefBackgroundSmsQueue);
-  
+
   final failed = <String>[];
 
   for (final entry in queue) {
