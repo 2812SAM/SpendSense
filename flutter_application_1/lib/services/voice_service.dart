@@ -3,7 +3,7 @@
 /// User taps the mic button and speaks the context:
 ///   "Lunch with Rahul" → Food
 ///   "Lent money for bike repair" → Loan
-/// Then ClaudeService.understandVoiceNote() extracts category + type.
+/// Then AiService.understandVoiceNote() extracts category + type.
 
 import 'package:speech_to_text/speech_to_text.dart';
 

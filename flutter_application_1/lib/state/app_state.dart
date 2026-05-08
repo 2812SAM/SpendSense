@@ -1,6 +1,8 @@
 /// SpendSense - central app orchestrator.
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../core/constants.dart';
 import '../models/transaction.dart';
@@ -12,6 +14,7 @@ import '../services/voice_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 import '../services/sms_orchestrator.dart';
+import '../services/contact_service.dart';
 
 enum TxState {
   idle,
@@ -24,7 +27,7 @@ enum TxState {
   error,
 }
 
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with WidgetsBindingObserver {
   final SmsService _sms;
   final LocalStorageService _local;
   final NotificationService _notif;
@@ -59,6 +62,7 @@ class AppState extends ChangeNotifier {
   bool _isVoiceListening = false;
   bool _isSmsReady = false;
   bool _notificationsReady = false;
+  bool _isBatteryOptimized = false;
   String? _errorMessage;
 
   TxState get txState => _txState;
@@ -69,16 +73,26 @@ class AppState extends ChangeNotifier {
   bool get isVoiceListening => _isVoiceListening;
   bool get isSmsReady => _isSmsReady;
   bool get notificationsReady => _notificationsReady;
+  bool get isBatteryOptimized => _isBatteryOptimized;
   String? get errorMessage => _errorMessage;
 
   Future<void> initialise() async {
+    WidgetsBinding.instance.addObserver(this);
     try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_processing_sms', false); // Reset lock
+
       await _local.database;
       await _secure.migrateFromPrefs();
       _notificationsReady = await _notif.initialise();
       await _voice.initialise();
+      await ContactService.instance.initialise();
       _isSmsReady = await _sms.initialise(_onPaymentSmsReceived);
       _customCategories = await _local.getCustomCategories();
+
+      // Check for battery optimization
+      _isBatteryOptimized = await _checkBatteryOptimization();
+
       await _sms.processQueuedMessages();
       await _sync.retryUnsyncedTransactions();
       await _loadPendingMyTransactions();
@@ -149,8 +163,12 @@ class AppState extends ChangeNotifier {
     bool isDynamic = false,
   }) async {
     _setState(TxState.processing);
+
+    // Perform local processing (DB + Mem)
     await _orchestrator.confirmCategory(transaction, category,
         isDynamic: isDynamic);
+
+    // Refresh UI immediately after DB update
     await _loadPendingMyTransactions();
     _setState(TxState.confirmed);
   }
@@ -180,8 +198,11 @@ class AppState extends ChangeNotifier {
   Future<void> confirmAll(Map<String, String> categoryMap,
       {Map<String, bool>? dynamicMap}) async {
     _setState(TxState.processing);
+
+    // confirmAll in orchestrator is now fast as confirmCategory is non-blocking for sync
     await _orchestrator.confirmAll(_pendingMyTransactions, categoryMap,
         dynamicMap: dynamicMap);
+
     await _loadPendingMyTransactions();
     _setState(TxState.confirmed);
   }
@@ -215,5 +236,35 @@ class AppState extends ChangeNotifier {
     await _local.saveCustomCategory(formattedName);
     _customCategories = await _local.getCustomCategories();
     notifyListeners();
+  }
+
+  /// Checks if the app is currently battery optimized.
+  Future<bool> _checkBatteryOptimization() async {
+    final status = await Permission.ignoreBatteryOptimizations.status;
+    return status != PermissionStatus.granted;
+  }
+
+  /// Requests the user to disable battery optimization for the app.
+  Future<void> requestIgnoreBatteryOptimizations() async {
+    if (await Permission.ignoreBatteryOptimizations.request().isGranted) {
+      _isBatteryOptimized = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('SpendSense: App resumed. Refreshing data...');
+      _loadPendingMyTransactions();
+      _sms.processQueuedMessages();
+      _sync.retryUnsyncedTransactions();
+    }
   }
 }

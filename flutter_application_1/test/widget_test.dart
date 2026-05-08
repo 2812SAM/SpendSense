@@ -16,7 +16,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('SpendSense'), findsOneWidget);
-    expect(find.text('Claude AI (Optional)'), findsOneWidget);
+    expect(find.text('AI Engine (Optional)'), findsOneWidget);
     expect(find.text('Google Sheets Sync (Optional)'), findsOneWidget);
     expect(find.text('Start tracking'), findsOneWidget);
   });

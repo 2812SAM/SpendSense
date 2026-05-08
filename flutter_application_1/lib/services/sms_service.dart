@@ -11,11 +11,10 @@ import 'package:telephony/telephony.dart';
 
 import '../core/constants.dart';
 import '../models/transaction.dart';
-import 'claude_service.dart';
+import 'ai_service.dart';
 import 'local_parser_service.dart';
 import 'local_storage_service.dart';
 import 'notification_service.dart';
-import 'secure_storage_service.dart';
 import 'sms_orchestrator.dart';
 import 'sync_service.dart';
 import 'voice_service.dart';
@@ -90,7 +89,14 @@ class SmsService {
 
   static bool isPaymentSms(String body) {
     final lower = body.toLowerCase();
-    return AppConstants.smsKeywords.any(lower.contains);
+
+    // 1. Check exclusions first (Fail-fast for income, OTPs, etc.)
+    if (AppConstants.smsExclusionKeywords.any(lower.contains)) {
+      return false;
+    }
+
+    // 2. Check inclusions (Ensure it's a transactional/debit message)
+    return AppConstants.smsInclusionKeywords.any(lower.contains);
   }
 
   Future<List<SmsMessage>> fetchRecentPaymentSms({int limit = 50}) async {
@@ -146,10 +152,9 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
     try {
       debugPrint('SpendSense: Initializing headless services...');
       // 1. Initialize Headless Services
-      final secureStorage = SecureStorageService.instance;
       final localStorage = LocalStorageService(isBackground: true);
       final notificationService = NotificationService.instance;
-      final claudeService = ClaudeService.instance;
+      final aiService = AiService.instance;
       final voiceService = VoiceService.instance;
       final localParser = LocalParserService.instance;
 
@@ -159,7 +164,7 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
       debugPrint('SpendSense: Database unlocked.');
 
       // Initialize notifications for transaction popups
-      await notificationService.initialise();
+      await notificationService.initialise(isBackground: true);
 
       // 3. Fetch categories (Core + User Defined)
       final customCategories = await localStorage.getCustomCategories();
@@ -170,11 +175,10 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
 
       // 4. Initialize Orchestrator with Background-Safe Sync
       final orchestrator = SmsOrchestrator(
-        claude: claudeService,
+        ai: aiService,
         local: localStorage,
         notif: notificationService,
         localParser: localParser,
-        secure: secureStorage,
         sync: _BackgroundNoOpSyncService(local: localStorage),
         voice: voiceService,
       );
