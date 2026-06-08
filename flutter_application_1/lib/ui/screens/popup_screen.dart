@@ -1,11 +1,18 @@
-/// SpendSense - Popup screen for low-confidence transactions.
+/// SpendSense - Popup screen (Premium Redesign)
+/// Shown for immediate feedback when a transaction is received in the foreground.
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants.dart';
 import '../../models/transaction.dart';
 import '../../state/app_state.dart';
+import '../../services/category_service.dart';
+import '../widgets/custom_category_dialog.dart';
+
+import '../../models/expense_classification.dart';
+import '../../providers/classification_provider.dart';
 
 class PopupScreen extends StatefulWidget {
   final MyTransaction myTransaction;
@@ -18,7 +25,10 @@ class PopupScreen extends StatefulWidget {
 
 class _PopupScreenState extends State<PopupScreen> {
   String? _selectedCategory;
-  bool _rememberCategory = true;
+  ExpenseNature? _selectedNature;
+  bool _rememberCategory = false;
+  Map<String, String> _emojis = {};
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -28,134 +38,466 @@ class _PopupScreenState extends State<PopupScreen> {
       _selectedCategory = widget.myTransaction.category;
     }
 
-    // Smart default: If the merchant is a generic bank ID, don't auto-check "Remember"
-    if (AppConstants.isGenericId(widget.myTransaction.merchant)) {
-      _rememberCategory = false;
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_selectedCategory != null) {
+        final cp = context.read<ClassificationProvider>();
+        setState(() {
+          _selectedNature =
+              cp.natureOf(widget.myTransaction.merchant, _selectedCategory!);
+        });
+      }
+    });
+
+    _loadEmojis();
+  }
+
+  Future<void> _loadEmojis() async {
+    final emojis = await CategoryService.instance.getAllCategoriesWithEmojis();
+    if (mounted) setState(() => _emojis = emojis);
   }
 
   void _onCategorySelected(String category) {
     setState(() {
-      _selectedCategory = category;
+      if (_selectedCategory == category) {
+        _selectedCategory = null;
+        _selectedNature = null;
+      } else {
+        _selectedCategory = category;
+        // Logic: When a category is first picked, we DO NOT auto-check "Remember"
+        // The user must explicitly opt-in.
+        _rememberCategory = false;
+        _selectedNature = context
+            .read<ClassificationProvider>()
+            .natureOf(widget.myTransaction.merchant, category);
+      }
     });
   }
 
   Future<void> _confirm() async {
     if (_selectedCategory == null) return;
 
+    final cp = context.read<ClassificationProvider>();
     final state = context.read<AppState>();
+    final navigator = Navigator.of(context);
+
+    setState(() => _isSaving = true);
+
+    if (_selectedNature != null) {
+      await cp.setClassification(
+        _selectedCategory!,
+        _selectedNature!,
+      );
+    }
+
     await state.confirmCategory(
       widget.myTransaction,
       _selectedCategory!,
       isDynamic: !_rememberCategory,
     );
 
-    if (mounted) Navigator.of(context).pop();
+    navigator.pop();
+  }
+
+  Future<void> _ignore() async {
+    final state = context.read<AppState>();
+    final navigator = Navigator.of(context);
+
+    setState(() => _isSaving = true);
+    await state.confirmCategory(
+      widget.myTransaction,
+      AppConstants.categoryIgnored,
+    );
+    navigator.pop();
+  }
+
+  Future<void> _showCustomCategoryDialog() async {
+    final state = context.read<AppState>();
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => const CustomCategoryDialog(),
+    );
+
+    if (result != null) {
+      final name = result['name']!;
+      final desc = result['desc'] ?? '';
+      await state.addCustomCategory(name, description: desc);
+      final formattedName =
+          name.trim()[0].toUpperCase() + name.trim().substring(1).toLowerCase();
+      _onCategorySelected(formattedName);
+      unawaited(_loadEmojis());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final categories = [...state.allCategories, 'Loan'];
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: const Color(0xFFF9FAFB),
+      appBar: AppBar(
+        title: const Text(
+          'Confirm Payment',
+          style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111827)),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded, color: Color(0xFF111827)),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Header(myTransaction: widget.myTransaction),
-                      const SizedBox(height: 32),
-                      const Text(
-                        'What was this for?',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w500),
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border:
+                        Border.all(color: const Color(0xFFF3F4F6), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-                      const SizedBox(height: 16),
-                      _CategoryGrid(
-                        myTransaction: widget.myTransaction,
-                        selectedCategory: _selectedCategory,
-                        onSelected: _onCategorySelected,
-                      ),
-                      const SizedBox(height: 24),
-
-                      // ── Learning Card (High Visibility) ──────────────────────────────
-                      if (_selectedCategory != null) ...[
-                        _LearningCard(
-                          merchant: widget.myTransaction.merchant,
-                          category: _selectedCategory!,
-                          value: _rememberCategory,
-                          isGeneric: AppConstants.isGenericId(
-                              widget.myTransaction.merchant),
-                          onChanged: (val) =>
-                              setState(() => _rememberCategory = val),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-
-                      _VoiceButton(myTransaction: widget.myTransaction),
                     ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Header
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF9FAFB),
+                            border: Border(
+                                bottom: BorderSide(
+                                    color: Color(0xFFF3F4F6), width: 1)),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                '₹${widget.myTransaction.amount.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF111827),
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                widget.myTransaction.merchant,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF374151),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _formatTime(widget.myTransaction.timestamp),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF9CA3AF),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Selection
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'SELECT CATEGORY',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2,
+                                  color: Color(0xFF9CA3AF),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 12,
+                                children: [
+                                  ...categories.map((cat) {
+                                    final isSelected = _selectedCategory == cat;
+                                    return GestureDetector(
+                                      onTap: () => _onCategorySelected(cat),
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? const Color(0xFF4F46E5)
+                                              : const Color(0xFFF9FAFB),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? const Color(0xFF4F46E5)
+                                                : const Color(0xFFE5E7EB),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _emojis[cat] ?? '🏷️',
+                                              style:
+                                                  const TextStyle(fontSize: 16),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              cat,
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w600
+                                                    : FontWeight.w500,
+                                                color: isSelected
+                                                    ? Colors.white
+                                                    : const Color(0xFF4B5563),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                  GestureDetector(
+                                    onTap: _showCustomCategoryDialog,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: const Color(0xFFD1D5DB),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.add_rounded,
+                                              size: 18,
+                                              color: Color(0xFF4F46E5)),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'Custom',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF4F46E5),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 32),
+
+                              // Remember Toggle
+                              if (_selectedCategory != null)
+                                GestureDetector(
+                                  onTap: () => setState(() =>
+                                      _rememberCategory = !_rememberCategory),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: _rememberCategory
+                                          ? const Color(0xFFEEF2FF)
+                                          : const Color(0xFFF9FAFB),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: _rememberCategory
+                                            ? const Color(0xFFC7D2FE)
+                                            : const Color(0xFFE5E7EB),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          _rememberCategory
+                                              ? Icons.check_circle_rounded
+                                              : Icons.circle_outlined,
+                                          color: _rememberCategory
+                                              ? const Color(0xFF4F46E5)
+                                              : const Color(0xFF9CA3AF),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Auto-categorize in future',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Color(0xFF1F2937),
+                                                ),
+                                              ),
+                                              Text(
+                                                'Apply this to all future payments here',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Color(0xFF6B7280),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+
+                              const SizedBox(height: 24),
+
+                              // Voice Action
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: state.isVoiceListening
+                                      ? null
+                                      : () async {
+                                          final navigator =
+                                              Navigator.of(context);
+                                          final confirmed =
+                                              await state.confirmWithVoice(
+                                                  widget.myTransaction);
+                                          if (confirmed) {
+                                            navigator.pop();
+                                          }
+                                        },
+                                  icon: Icon(
+                                      state.isVoiceListening
+                                          ? Icons.mic
+                                          : Icons.mic_none,
+                                      size: 20),
+                                  label: Text(state.isVoiceListening
+                                      ? 'Listening...'
+                                      : 'Describe with voice'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
+                                    side: const BorderSide(
+                                        color: Color(0xFFE5E7EB)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
+            ),
 
-              // ── Action Buttons ──────────────────────────────────────────
-              const SizedBox(height: 16),
-              Row(
+            // Bottom Actions
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+              color: const Color(0xFFF9FAFB),
+              child: Column(
                 children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Remind me tonight'),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: const BorderSide(color: Color(0xFFE5E7EB)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text(
+                            'Tonight',
+                            style: TextStyle(
+                                color: Color(0xFF4B5563),
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton(
+                          onPressed: (_selectedCategory == null || _isSaving)
+                              ? null
+                              : _confirm,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF4F46E5),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: _isSaving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Text(
+                                  'Confirm',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton(
-                      onPressed: _selectedCategory == null ? null : _confirm,
-                      child: const Text('Confirm'),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: _isSaving ? null : _ignore,
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF9CA3AF),
+                      ),
+                      child: const Text('Ignore this transaction'),
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  final MyTransaction myTransaction;
-
-  const _Header({required this.myTransaction});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '₹${myTransaction.amount.toStringAsFixed(0)}',
-          style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          myTransaction.merchant,
-          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _formatTime(myTransaction.timestamp),
-          style: TextStyle(fontSize: 13, color: Colors.grey[400]),
-        ),
-      ],
     );
   }
 
@@ -167,299 +509,20 @@ class _Header extends StatelessWidget {
             : dateTime.hour;
     final minute = dateTime.minute.toString().padLeft(2, '0');
     final suffix = dateTime.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $suffix · ${dateTime.day}/${dateTime.month}/${dateTime.year}';
-  }
-}
-
-class _LearningCard extends StatelessWidget {
-  final String merchant;
-  final String category;
-  final bool value;
-  final bool isGeneric;
-  final ValueChanged<bool> onChanged;
-
-  const _LearningCard({
-    required this.merchant,
-    required this.category,
-    required this.value,
-    required this.isGeneric,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: value
-            ? (isGeneric
-                ? Colors.orange[50]
-                : theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
-            : Colors.grey[50],
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: value
-              ? (isGeneric
-                  ? Colors.orange[300]!
-                  : theme.colorScheme.primary.withValues(alpha: 0.5))
-              : Colors.grey[300]!,
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isGeneric
-                    ? Icons.warning_amber_rounded
-                    : Icons.psychology_rounded,
-                color: value
-                    ? (isGeneric
-                        ? Colors.orange[700]
-                        : theme.colorScheme.primary)
-                    : Colors.grey[600],
-                size: 28,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  value ? 'Memory: Active' : 'Memory: Disabled',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: value
-                        ? (isGeneric
-                            ? Colors.orange[900]
-                            : theme.colorScheme.primary)
-                        : Colors.grey[700],
-                  ),
-                ),
-              ),
-              Switch(
-                value: value,
-                onChanged: onChanged,
-                activeThumbColor:
-                    isGeneric ? Colors.orange[700] : theme.colorScheme.primary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value
-                ? 'Next time SpendSense sees "$merchant", it will automatically categorize it as "$category".'
-                : 'This is a one-time categorization. SpendSense will ask you again next time.',
-            style: TextStyle(
-              fontSize: 13,
-              color: value
-                  ? (isGeneric ? Colors.orange[900] : Colors.black87)
-                  : Colors.grey[600],
-              height: 1.4,
-            ),
-          ),
-          if (value && isGeneric) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 14, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Generic bank ID detected. Remembering this might affect unrelated future payments.',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.orange,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CategoryGrid extends StatelessWidget {
-  final MyTransaction myTransaction;
-  final String? selectedCategory;
-  final Function(String) onSelected;
-
-  const _CategoryGrid({
-    required this.myTransaction,
-    required this.selectedCategory,
-    required this.onSelected,
-  });
-
-  static const Map<String, String> _categoryEmoji = {
-    'Food': '🍕',
-    'Transport': '🚗',
-    'Shopping': '🛍',
-    'Health': '💊',
-    'Fun': '🎬',
-    'Rent': '🏠',
-    'EMI': '💳',
-    'Others': '📦',
-    'Loan': '💸',
-  };
-
-  Future<void> _showCustomCategoryDialog(
-      BuildContext context, AppState state) async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New Category'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Enter category name (e.g. Gym)',
-          ),
-          textCapitalization: TextCapitalization.words,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (name != null && name.trim().isNotEmpty) {
-      await state.addCustomCategory(name);
-      final formattedName =
-          name.trim()[0].toUpperCase() + name.trim().substring(1).toLowerCase();
-      onSelected(formattedName);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<AppState>(
-      builder: (context, state, _) {
-        final categories = [...state.allCategories, 'Loan'];
-
-        return GridView.count(
-          crossAxisCount: 3,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 2.2,
-          children: [
-            ...categories.map((category) {
-              final selected = selectedCategory == category;
-              return _CategoryChip(
-                label: category,
-                emoji: _categoryEmoji[category] ?? '🏷️',
-                selected: selected,
-                onTap: () => onSelected(category),
-              );
-            }),
-            _CategoryChip(
-              label: 'Custom',
-              emoji: '➕',
-              selected: false,
-              onTap: () => _showCustomCategoryDialog(context, state),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _CategoryChip extends StatelessWidget {
-  final String label;
-  final String emoji;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _CategoryChip({
-    required this.label,
-    required this.emoji,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.primary : Colors.grey[100],
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? theme.colorScheme.primary : Colors.grey[300]!,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          '$emoji $label',
-          style: TextStyle(
-            fontSize: 13,
-            color: selected ? Colors.white : Colors.black87,
-            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VoiceButton extends StatelessWidget {
-  final MyTransaction myTransaction;
-
-  const _VoiceButton({required this.myTransaction});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<AppState>(
-      builder: (context, state, _) {
-        final listening = state.isVoiceListening;
-        return SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: listening
-                ? null
-                : () async {
-                    final confirmed =
-                        await state.confirmWithVoice(myTransaction);
-                    if (confirmed && context.mounted) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-            icon: Icon(listening ? Icons.mic : Icons.mic_none, size: 20),
-            label: Text(listening ? 'Listening...' : 'Describe with voice'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '$hour:$minute $suffix · ${dateTime.day} ${months[dateTime.month - 1]} ${dateTime.year}';
   }
 }

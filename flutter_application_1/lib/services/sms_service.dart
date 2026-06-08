@@ -168,9 +168,9 @@ Future<void> _backgroundSmsHandler(SmsMessage message) async {
 
       // 3. Fetch categories (Core + User Defined)
       final customCategories = await localStorage.getCustomCategories();
-      final allCategories = [
+      final allCategories = <String>[
         ...AppConstants.defaultCategories,
-        ...customCategories
+        ...customCategories.map((c) => c['name'] as String),
       ];
 
       // 4. Initialize Orchestrator with Background-Safe Sync

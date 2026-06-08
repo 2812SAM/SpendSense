@@ -10,7 +10,6 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../main.dart' show navigatorKey;
 import '../core/constants.dart';
 import '../models/transaction.dart';
-import '../services/local_storage_service.dart';
 
 class NotificationService {
   NotificationService._();
@@ -221,18 +220,9 @@ class NotificationService {
       return;
     }
 
-    if (parsed['kind'] == 'digest') {
+    if (parsed['kind'] == 'digest' || parsed['kind'] == 'transaction') {
       await nav.pushNamed('/digest');
       return;
-    }
-
-    final transactionId = parsed['id'] as String?;
-    if (transactionId == null || transactionId.isEmpty) return;
-
-    final transaction =
-        await LocalStorageService.instance.findTransactionById(transactionId);
-    if (transaction != null) {
-      await nav.pushNamed('/popup', arguments: transaction);
     }
   }
 }

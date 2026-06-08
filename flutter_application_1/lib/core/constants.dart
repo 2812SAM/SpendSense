@@ -21,7 +21,7 @@ class AppConstants {
 
   // SQLite
   static const String dbName = 'spendsense.db';
-  static const int dbVersion = 4;
+  static const int dbVersion = 8;
   static const String transactionsTable = 'transactions';
   static const String dbEncryptionKey = 'db_encryption_key';
 
@@ -37,6 +37,10 @@ class AppConstants {
   static const String syncPending = 'pending';
   static const String syncSynced = 'synced';
   static const String syncFailed = 'failed';
+  static const String syncIgnored = 'ignored';
+
+  // Special categories
+  static const String categoryIgnored = 'Ignored';
 
   // SMS filter keywords (Inclusion)
   static const List<String> smsInclusionKeywords = [

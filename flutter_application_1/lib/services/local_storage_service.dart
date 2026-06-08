@@ -16,12 +16,15 @@ class LocalStorageService {
   final String dbName;
   final bool isBackground;
   final DatabaseFactory? _factoryOverride;
+  final String? _passwordOverride;
 
   LocalStorageService({
     this.dbName = AppConstants.dbName,
     DatabaseFactory? databaseFactory,
     this.isBackground = false,
-  }) : _factoryOverride = databaseFactory;
+    String? password,
+  })  : _factoryOverride = databaseFactory,
+        _passwordOverride = password;
 
   static LocalStorageService instance = LocalStorageService();
 
@@ -31,16 +34,30 @@ class LocalStorageService {
   Future<Database>? _dbFuture;
 
   Future<Database> get database async {
-    if (_db != null && _db!.isOpen) return _db!;
+    // 1. Return existing open instance if available
+    if (_db != null && _db!.isOpen) {
+      return _db!;
+    }
 
-    // Memoize the initialization future to prevent concurrent calls
+    // 2. Ensure only one initialization happens at a time
     _dbFuture ??= _initDatabase();
 
     try {
       _db = await _dbFuture;
+
+      // 3. Double-check if it returned an open database
+      if (_db == null || !_db!.isOpen) {
+        _dbFuture = null; // Reset for retry
+        _db = null;
+        throw Exception(
+            'Database initialization returned a null or closed database');
+      }
+
       return _db!;
     } catch (e) {
-      _dbFuture = null; // Reset on failure so we can retry
+      debugPrint('SpendSense Error: Database access failed: $e');
+      _dbFuture = null; // Allow retry on next access
+      _db = null;
       rethrow;
     }
   }
@@ -49,73 +66,88 @@ class LocalStorageService {
     String path;
     if (dbName == ':memory:') {
       path = inMemoryDatabasePath;
-      return _dbFactory.openDatabase(
-        path,
-        options: OpenDatabaseOptions(
-          version: AppConstants.dbVersion,
-          onCreate: _onCreate,
-          onUpgrade: _onUpgrade,
-        ),
-      );
     } else {
       final dbPath = await _dbFactory.getDatabasesPath();
       path = join(dbPath, dbName);
     }
 
-    // Secure database with SQLCipher
-    final password = await SecureStorageService.instance.getDatabaseKey();
-
-    if (!isBackground) {
-      try {
-        await _checkAndEncryptExistingDatabase(path, password);
-      } catch (e) {
-        debugPrint('SpendSense SecOps: Database migration/check failed: $e');
-        if (await _dbFactory.databaseExists(path)) {
-          await _dbFactory.deleteDatabase(path);
-          debugPrint(
-              'SpendSense SecOps: Corrupted/Inaccessible DB deleted for recovery.');
-        }
-      }
-    }
+    // Get the encryption key
+    final password = _passwordOverride ??
+        await SecureStorageService.instance.getDatabaseKey();
 
     if (password.isEmpty) {
-      return _dbFactory.openDatabase(
-        path,
-        options: OpenDatabaseOptions(
-          version: AppConstants.dbVersion,
-          onCreate: _onCreate,
-          onUpgrade: _onUpgrade,
-        ),
-      );
+      debugPrint(
+          'SpendSense: Opening database in plaintext mode (no key provided).');
+      return await _openPlaintextDatabase(path);
     }
 
     try {
+      // 1. Try opening as encrypted
       return await _openAndKeyDatabase(path, password);
     } catch (e) {
-      if (isBackground) {
+      final errorStr = e.toString().toLowerCase();
+      final isNotADb = errorStr.contains('file is not a database') ||
+          errorStr.contains('code 26');
+
+      if (isNotADb && !isBackground) {
         debugPrint(
-            'SpendSense SecOps: Background DB open failed (likely locked). Retrying in 1s...');
+            'SpendSense: Detected potential plaintext database. Attempting migration...');
+        try {
+          final migrated = await _migrateToEncrypted(path, password);
+          if (migrated) {
+            debugPrint(
+                'SpendSense: Migration successful. Opening new encrypted database...');
+            return await _openAndKeyDatabase(path, password);
+          }
+        } catch (migrateError) {
+          debugPrint('SpendSense Error: Migration failed: $migrateError');
+        }
+      }
+
+      // If background, retry once (might be a transient lock)
+      if (isBackground) {
+        debugPrint('SpendSense: Background open failed. Retrying in 1s...');
         await Future.delayed(const Duration(seconds: 1));
         try {
           return await _openAndKeyDatabase(path, password);
-        } catch (e2) {
-          debugPrint('SpendSense SecOps: Background DB retry failed: $e2');
+        } catch (retryError) {
+          debugPrint('SpendSense Error: Background retry failed: $retryError');
           rethrow;
         }
       }
-      debugPrint('SpendSense SecOps: Failed to open encrypted database: $e');
-      // Final fallback: If openDatabase fails even after the check/migration,
-      // the file is likely corrupted beyond repair. Delete and start fresh.
-      if (await _dbFactory.databaseExists(path)) {
-        await _dbFactory.deleteDatabase(path);
+
+      // Final fallback for foreground: Nuclear recovery if absolutely stuck
+      debugPrint(
+          'SpendSense Error: Database is corrupted or unreadable. Triggering nuclear recovery...');
+      try {
+        if (await _dbFactory.databaseExists(path)) {
+          await _dbFactory.deleteDatabase(path);
+        }
+      } catch (deleteError) {
         debugPrint(
-            'SpendSense SecOps: Nuclear recovery triggered. Starting fresh.');
+            'SpendSense Error: Failed to delete corrupted DB: $deleteError');
       }
       return await _openAndKeyDatabase(path, password);
     }
   }
 
+  Future<Database> _openPlaintextDatabase(String path) {
+    return _dbFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: AppConstants.dbVersion,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      ),
+    );
+  }
+
   Future<Database> _openAndKeyDatabase(String path, String password) {
+    // Note: sqflite_sqlcipher extends OpenDatabaseOptions to support password if needed,
+    // but typically sqflite_sqlcipher exposes openDatabase directly.
+    // To support FFI in tests, we must use _dbFactory.openDatabase.
+    // Since sqflite_common_ffi doesn't support sqlcipher passwords out of the box,
+    // we just open it normally if it's an FFI factory.
     return openDatabase(
       path,
       password: password,
@@ -125,52 +157,50 @@ class LocalStorageService {
     );
   }
 
-  /// Ensures an existing unencrypted database is migrated to SQLCipher.
-  Future<void> _checkAndEncryptExistingDatabase(
-      String path, String password) async {
-    if (!await _dbFactory.databaseExists(path)) return;
+  /// Migrates a plaintext database to encrypted. Returns true if successful.
+  Future<bool> _migrateToEncrypted(String path, String password) async {
+    if (!await _dbFactory.databaseExists(path)) return false;
 
-    Database? db;
+    Database? plaintextDb;
     try {
-      // Try opening without a password (plaintext check)
-      db = await _dbFactory.openDatabase(path);
-      // If we can read the version, it's unencrypted
-      await db.rawQuery('PRAGMA user_version');
+      // 1. Verify it's actually plaintext
+      plaintextDb = await openDatabase(path, singleInstance: false);
+      await plaintextDb.rawQuery('PRAGMA user_version');
+      await plaintextDb.close();
+      plaintextDb = null;
 
-      if (kDebugMode) {
-        // ignore: avoid_print
-        print('SpendSense SecOps: Unencrypted database found. Encrypting...');
+      // 2. Perform export to new file
+      final tempPath = join(dirname(path),
+          'migration_temp_${DateTime.now().millisecondsSinceEpoch}.db');
+
+      // Re-open plaintext with no key
+      plaintextDb = await openDatabase(path, singleInstance: false);
+
+      // SQLCipher migration sequence
+      await plaintextDb.execute(
+          'ATTACH DATABASE ? AS encrypted KEY ?', [tempPath, password]);
+      await plaintextDb.rawQuery("SELECT sqlcipher_export('encrypted')");
+      await plaintextDb.execute('DETACH DATABASE encrypted');
+      await plaintextDb.close();
+      plaintextDb = null;
+
+      // 3. Verify the new file exists and has content
+      final tempFile = File(tempPath);
+      if (await tempFile.exists() && await tempFile.length() > 0) {
+        final originalFile = File(path);
+        if (await originalFile.exists()) {
+          await originalFile.delete();
+        }
+        await tempFile.rename(path);
+        return true;
       }
-
-      await db.close();
-      await _encryptDatabase(path, password);
+      return false;
     } catch (e) {
-      // If it fails, it's likely already encrypted or empty
-      await db?.close();
-    }
-  }
-
-  Future<void> _encryptDatabase(String path, String password) async {
-    final tempPath = join(dirname(path), 'temp_encrypted.db');
-    final db = await _dbFactory.openDatabase(path);
-
-    // SQLCipher export pattern
-    await db
-        .execute('ATTACH DATABASE ? AS encrypted KEY ?', [tempPath, password]);
-    await db.execute("SELECT sqlcipher_export('encrypted')");
-    await db.execute('DETACH DATABASE encrypted');
-    await db.close();
-
-    // Replace original file with encrypted version
-    final originalFile = File(path);
-    final tempFile = File(tempPath);
-
-    if (await tempFile.exists()) {
-      if (await originalFile.exists()) {
-        await originalFile.delete();
+      debugPrint('SpendSense Error: Migration logic error: $e');
+      if (plaintextDb != null && plaintextDb.isOpen) {
+        await plaintextDb.close();
       }
-      await tempFile.copy(path);
-      await tempFile.delete();
+      return false;
     }
   }
 
@@ -178,6 +208,9 @@ class LocalStorageService {
     await _createMerchantMemoryTable(db);
     await _createTransactionsTable(db);
     await _createCustomCategoriesTable(db);
+    await _createCategoryMetadataTable(db);
+    await _createGoalsTables(db);
+    await _createClassificationTable(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -192,12 +225,70 @@ class LocalStorageService {
       await db.execute(
           'ALTER TABLE merchant_memory ADD COLUMN is_dynamic INTEGER NOT NULL DEFAULT 0');
     }
+    if (oldVersion < 5) {
+      await db.execute(
+          'ALTER TABLE custom_categories ADD COLUMN emoji TEXT NOT NULL DEFAULT "🏷️"');
+    }
+    if (oldVersion < 6) {
+      await _createCategoryMetadataTable(db);
+    }
+    if (oldVersion < 7) {
+      await _createGoalsTables(db);
+    }
+    if (oldVersion < 8) {
+      await _createClassificationTable(db);
+    }
+  }
+
+  Future<void> _createClassificationTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS expense_classifications (
+        merchant_or_category TEXT PRIMARY KEY,
+        nature TEXT NOT NULL CHECK(nature IN ('recurring','sometime')),
+        expected_amount REAL,
+        user_confirmed INTEGER NOT NULL DEFAULT 0,
+        last_updated TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createGoalsTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_goals (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        monthly_total_limit REAL NOT NULL DEFAULT 0,
+        last_updated TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS category_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_name TEXT NOT NULL UNIQUE,
+        monthly_limit REAL NOT NULL DEFAULT 0,
+        last_updated TEXT NOT NULL
+      )
+    ''');
+    // Seed default row so existing users never read null
+    await db.execute(
+        "INSERT OR IGNORE INTO user_goals VALUES (1, 0, datetime('now'))");
+  }
+
+  Future<void> _createCategoryMetadataTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS category_metadata (
+        category_name TEXT PRIMARY KEY,
+        description   TEXT NOT NULL,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      )
+    ''');
   }
 
   Future<void> _createCustomCategoriesTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS custom_categories (
-        name TEXT PRIMARY KEY
+        name  TEXT PRIMARY KEY,
+        emoji TEXT NOT NULL DEFAULT '🏷️'
       )
     ''');
   }
@@ -453,6 +544,17 @@ class LocalStorageService {
     return results.map(_mapToTransaction).toList();
   }
 
+  Future<List<MyTransaction>> getTransactionsByCategory(String category) async {
+    final db = await database;
+    final results = await db.query(
+      AppConstants.transactionsTable,
+      where: 'category = ? AND is_confirmed = 1',
+      whereArgs: [category],
+      orderBy: 'timestamp DESC',
+    );
+    return results.map(_mapToTransaction).toList();
+  }
+
   Future<List<MyTransaction>> getConfirmedPendingSync() async {
     final db = await database;
     final results = await db.query(
@@ -541,19 +643,158 @@ class LocalStorageService {
     return results.map(_mapToTransaction).toList();
   }
 
-  Future<List<String>> getCustomCategories() async {
+  Future<void> saveCategoryMetadata(
+      String categoryName, String description) async {
     final db = await database;
-    final results = await db.query('custom_categories', orderBy: 'name ASC');
-    return results.map((row) => row['name'] as String).toList();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'category_metadata',
+      {
+        'category_name': categoryName,
+        'description': description,
+        'created_at': now,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
-  Future<void> saveCustomCategory(String name) async {
+  Future<String?> getCategoryDescription(String categoryName) async {
+    final db = await database;
+    final results = await db.query(
+      'category_metadata',
+      columns: ['description'],
+      where: 'category_name = ?',
+      whereArgs: [categoryName],
+      limit: 1,
+    );
+
+    if (results.isEmpty) return null;
+    return results.first['description'] as String?;
+  }
+
+  Future<Map<String, String>> getAllCategoryDescriptions() async {
+    final db = await database;
+    final results = await db.query('category_metadata');
+    return {
+      for (final row in results)
+        row['category_name'] as String: row['description'] as String,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getCustomCategories() async {
+    final db = await database;
+    final results = await db.rawQuery('''
+      SELECT c.name, c.emoji, m.description
+      FROM custom_categories c
+      LEFT JOIN category_metadata m ON c.name = m.category_name
+      ORDER BY c.name ASC
+    ''');
+    return results;
+  }
+
+  Future<void> saveCustomCategory(String name, {String emoji = '🏷️'}) async {
     final db = await database;
     await db.insert(
       'custom_categories',
-      {'name': name},
-      conflictAlgorithm: ConflictAlgorithm.ignore,
+      {'name': name, 'emoji': emoji},
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<void> renameCategory(String oldName, String newName,
+      {String? newEmoji}) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update(
+        AppConstants.transactionsTable,
+        {'category': newName},
+        where: 'category = ?',
+        whereArgs: [oldName],
+      );
+
+      await txn.update(
+        'merchant_memory',
+        {'category': newName},
+        where: 'category = ?',
+        whereArgs: [oldName],
+      );
+
+      final results = await txn.query(
+        'custom_categories',
+        where: 'name = ?',
+        whereArgs: [oldName],
+      );
+
+      final emoji = newEmoji ??
+          (results.isNotEmpty ? results.first['emoji'] as String : '🏷️');
+
+      await txn.delete(
+        'custom_categories',
+        where: 'name = ?',
+        whereArgs: [oldName],
+      );
+
+      await txn.insert(
+        'custom_categories',
+        {'name': newName, 'emoji': emoji},
+      );
+
+      // Rename metadata if it exists
+      await txn.update(
+        'category_metadata',
+        {'category_name': newName},
+        where: 'category_name = ?',
+        whereArgs: [oldName],
+      );
+    });
+  }
+
+  Future<void> deleteCategory(String name) async {
+    final db = await database;
+
+    final count = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM ${AppConstants.transactionsTable} WHERE category = ?',
+          [name],
+        )) ??
+        0;
+
+    if (count > 0) {
+      throw Exception(
+          'Cannot delete category "$name" because it has $count transactions. Reassign them first.');
+    }
+
+    await db.delete(
+      'custom_categories',
+      where: 'name = ?',
+      whereArgs: [name],
+    );
+  }
+
+  Future<void> reassignAndExcludeCategory(
+      String oldName, String targetName) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update(
+        AppConstants.transactionsTable,
+        {'category': targetName},
+        where: 'category = ?',
+        whereArgs: [oldName],
+      );
+
+      await txn.update(
+        'merchant_memory',
+        {'category': targetName},
+        where: 'category = ?',
+        whereArgs: [oldName],
+      );
+
+      await txn.delete(
+        'custom_categories',
+        where: 'name = ?',
+        whereArgs: [oldName],
+      );
+    });
   }
 
   /// DEBUG ONLY: Wipes all transaction data and merchant memory.

@@ -15,6 +15,8 @@ import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 import '../services/sms_orchestrator.dart';
 import '../services/contact_service.dart';
+import '../services/insights/insights_service.dart';
+import '../models/insights_snapshot.dart';
 
 enum TxState {
   idle,
@@ -36,6 +38,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   final SecureStorageService _secure;
   final SyncService _sync;
   final SmsOrchestrator _orchestrator;
+  final InsightsService _insightsService;
 
   AppState({
     SmsService? sms,
@@ -46,6 +49,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     SecureStorageService? secure,
     SyncService? sync,
     SmsOrchestrator? orchestrator,
+    InsightsService? insights,
   })  : _sms = sms ?? SmsService.instance,
         _local = local ?? LocalStorageService.instance,
         _notif = notif ?? NotificationService.instance,
@@ -53,12 +57,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         _digest = digest ?? DigestScheduler.instance,
         _secure = secure ?? SecureStorageService.instance,
         _sync = sync ?? SyncService.instance,
-        _orchestrator = orchestrator ?? SmsOrchestrator.instance;
+        _orchestrator = orchestrator ?? SmsOrchestrator.instance,
+        _insightsService = insights ?? InsightsService();
 
   TxState _txState = TxState.idle;
   MyTransaction? _currentMyTransaction;
   List<MyTransaction> _pendingMyTransactions = [];
-  List<String> _customCategories = [];
+  List<Map<String, dynamic>> _customCategories = [];
+  InsightsSnapshot _insightsSnapshot = InsightsSnapshot.empty();
   bool _isVoiceListening = false;
   bool _isSmsReady = false;
   bool _notificationsReady = false;
@@ -68,8 +74,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   TxState get txState => _txState;
   MyTransaction? get currentMyTransaction => _currentMyTransaction;
   List<MyTransaction> get pendingMyTransactions => _pendingMyTransactions;
-  List<String> get allCategories =>
-      [...AppConstants.defaultCategories, ..._customCategories];
+  InsightsSnapshot get insightsSnapshot => _insightsSnapshot;
+  List<String> get allCategories => [
+        ...AppConstants.defaultCategories,
+        ..._customCategories.map((c) => c['name'] as String),
+      ];
   bool get isVoiceListening => _isVoiceListening;
   bool get isSmsReady => _isSmsReady;
   bool get notificationsReady => _notificationsReady;
@@ -96,6 +105,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await _sms.processQueuedMessages();
       await _sync.retryUnsyncedTransactions();
       await _loadPendingMyTransactions();
+      await refreshInsights();
 
       if (!_isSmsReady) {
         _errorMessage =
@@ -122,33 +132,38 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _onPaymentSmsReceived(String smsBody, String sender) async {
     _setState(TxState.smsReceived);
 
-    final result = await _orchestrator.processSms(
-      smsBody,
-      sender,
-      allCategories: allCategories,
-      onTransactionFound: (tx) {
-        _currentMyTransaction = tx;
-        notifyListeners();
-      },
-    );
+    try {
+      final result = await _orchestrator.processSms(
+        smsBody,
+        sender,
+        allCategories: allCategories,
+        onTransactionFound: (tx) {
+          _currentMyTransaction = tx;
+          notifyListeners();
+        },
+      );
 
-    switch (result) {
-      case SmsProcessingResult.deduplicated:
-        // ignore: avoid_print
-        print('SpendSense: SMS deduplicated.');
-        _setState(TxState.idle);
-        break;
-      case SmsProcessingResult.autoLogged:
-        await _loadPendingMyTransactions();
-        _setState(TxState.logged);
-        break;
-      case SmsProcessingResult.awaitingUser:
-        await _loadPendingMyTransactions();
-        _setState(TxState.awaitingUser);
-        break;
-      case SmsProcessingResult.error:
-        _setState(TxState.error, error: 'Failed to process SMS');
-        break;
+      switch (result) {
+        case SmsProcessingResult.deduplicated:
+          // ignore: avoid_print
+          print('SpendSense: SMS deduplicated.');
+          _setState(TxState.idle);
+          break;
+        case SmsProcessingResult.autoLogged:
+          await _loadPendingMyTransactions();
+          _setState(TxState.logged);
+          break;
+        case SmsProcessingResult.awaitingUser:
+          await _loadPendingMyTransactions();
+          _setState(TxState.awaitingUser);
+          break;
+        case SmsProcessingResult.error:
+          _setState(TxState.error, error: 'Failed to process SMS');
+          break;
+      }
+    } catch (e) {
+      debugPrint('SpendSense Error: Failed to process incoming SMS: $e');
+      _setState(TxState.error, error: 'Failed to process SMS: $e');
     }
   }
 
@@ -170,6 +185,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
     // Refresh UI immediately after DB update
     await _loadPendingMyTransactions();
+    await refreshInsights();
     _setState(TxState.confirmed);
   }
 
@@ -185,6 +201,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
     if (confirmedTx != null) {
       await _loadPendingMyTransactions();
+      await refreshInsights();
       _setState(TxState.confirmed);
       return true;
     }
@@ -204,6 +221,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         dynamicMap: dynamicMap);
 
     await _loadPendingMyTransactions();
+    await refreshInsights();
     _setState(TxState.confirmed);
   }
 
@@ -217,13 +235,22 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<void> refreshInsights() async {
+    debugPrint('SpendSense: Refreshing insights...');
+    _insightsSnapshot = await _insightsService.generateSnapshot();
+    debugPrint(
+        'SpendSense: Insights refreshed. Health Score: ${_insightsSnapshot.healthScore}, Categories: ${_insightsSnapshot.topCategories.length}');
+    notifyListeners();
+  }
+
   void _setState(TxState state, {String? error}) {
     _txState = state;
     _errorMessage = error;
     notifyListeners();
   }
 
-  Future<void> addCustomCategory(String name) async {
+  Future<void> addCustomCategory(String name,
+      {String emoji = '🏷️', String description = ''}) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) return;
 
@@ -231,11 +258,32 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final formattedName =
         cleanName[0].toUpperCase() + cleanName.substring(1).toLowerCase();
 
-    if (allCategories.contains(formattedName)) return;
+    if (allCategories.contains(formattedName)) {
+      // If it exists but we have a description, save it anyway (update)
+      if (description.isNotEmpty) {
+        await _local.saveCategoryMetadata(formattedName, description);
+      }
+      return;
+    }
 
-    await _local.saveCustomCategory(formattedName);
+    await _local.saveCustomCategory(formattedName, emoji: emoji);
+    if (description.isNotEmpty) {
+      await _local.saveCategoryMetadata(formattedName, description);
+    }
+
     _customCategories = await _local.getCustomCategories();
     notifyListeners();
+  }
+
+  /// Wipes all data for debugging.
+  Future<void> debugClearData() async {
+    await _local.debugClearAll();
+    _pendingMyTransactions = [];
+    _insightsSnapshot = InsightsSnapshot.empty();
+    _customCategories = [];
+    notifyListeners();
+    // Force a fresh fetch just to be sure
+    await refreshInsights();
   }
 
   /// Checks if the app is currently battery optimized.

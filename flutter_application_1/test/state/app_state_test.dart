@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:spendsense/state/app_state.dart';
 import 'package:spendsense/services/sms_service.dart';
 import 'package:spendsense/services/ai_service.dart';
@@ -36,6 +37,13 @@ class MockSecureStorageService extends Mock implements SecureStorageService {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+  LocalStorageService.instance = LocalStorageService(
+    dbName: ':memory:',
+    databaseFactory: databaseFactoryFfi,
+    password: '',
+  );
 
   late AppState appState;
   late MockSmsService mockSms;

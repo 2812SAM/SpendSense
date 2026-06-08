@@ -188,7 +188,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
     if (widget.isOnboarding) {
       // ignore: unawaited_futures
-      Navigator.of(context).pushReplacementNamed('/home');
+      Navigator.of(context).pushReplacementNamed('/goals-settings');
       return;
     }
 
@@ -412,6 +412,37 @@ class _SetupScreenState extends State<SetupScreen> {
                     trailing: const Icon(Icons.chevron_right),
                     // ignore: unawaited_futures
                     onTap: () => Navigator.pushNamed(context, '/debug'),
+                  ),
+                ],
+                if (!widget.isOnboarding) ...[
+                  const SizedBox(height: 16),
+                  _StepCard(
+                    step: '3',
+                    title: 'Spending Goals',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.track_changes_outlined),
+                      title: const Text('Set Monthly Limits'),
+                      subtitle: const Text(
+                          'Adjust your overall and category targets'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          Navigator.pushNamed(context, '/goals-settings'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _StepCard(
+                    step: '4',
+                    title: 'Categorisation',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.category_outlined),
+                      title: const Text('Manage Categories'),
+                      subtitle: const Text('Add, rename or delete categories'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          Navigator.pushNamed(context, '/manage-categories'),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 32),

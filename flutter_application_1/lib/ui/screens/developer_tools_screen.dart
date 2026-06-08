@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/debug_samples.dart';
-import '../../services/local_storage_service.dart';
 import '../../services/sheets_service.dart';
 import '../../state/app_state.dart';
 
@@ -82,9 +81,9 @@ class _DeveloperToolsScreenState extends State<DeveloperToolsScreen> {
           _buildSection('Database Management'),
           _buildAction('Clear All Transactions', () async {
             final messenger = ScaffoldMessenger.of(context);
-            await LocalStorageService.instance.debugClearAll();
+            await appState.debugClearData();
             messenger.showSnackBar(
-              const SnackBar(content: Text('Database wiped.')),
+              const SnackBar(content: Text('Database wiped and state reset.')),
             );
           }, color: Colors.red),
           const SizedBox(height: 40),

@@ -37,7 +37,7 @@ class SmsOrchestrator {
     VoiceService? voice,
     ContactService? contacts,
   })  : _ai = ai ?? AiService.instance,
-        _local = local ?? LocalStorageService(isBackground: false),
+        _local = local ?? LocalStorageService.instance,
         _notif = notif ?? NotificationService.instance,
         _localParser = localParser ?? LocalParserService.instance,
         _sync = sync ?? SyncService.instance,
@@ -193,6 +193,19 @@ class SmsOrchestrator {
     bool isDynamic = false,
   }) async {
     try {
+      if (category == AppConstants.categoryIgnored) {
+        await _local.upsertTransaction(
+          transaction.copyWith(
+            category: AppConstants.categoryIgnored,
+            isConfirmed: false,
+            syncStatus: AppConstants.syncIgnored,
+          ),
+          needsUserInput: false,
+        );
+        await _notif.dismissTransactionNotification(transaction.id);
+        return;
+      }
+
       final resolvedType =
           category == 'Loan' ? AppConstants.typeLoan : transaction.type;
       final resolvedCategory = category == 'Loan' ? 'Loan' : category;
@@ -274,7 +287,9 @@ class SmsOrchestrator {
     Map<String, bool>? dynamicMap,
   }) async {
     for (final transaction in pendingTransactions) {
-      final category = categoryMap[transaction.id] ?? 'Others';
+      if (!categoryMap.containsKey(transaction.id)) continue;
+
+      final category = categoryMap[transaction.id]!;
       final isDynamic = dynamicMap?[transaction.id] ?? false;
 
       // confirmCategory is now non-blocking for sync
