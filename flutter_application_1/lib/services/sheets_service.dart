@@ -34,11 +34,13 @@ class SheetsService {
     }
 
     try {
-      final response = await _client.post(
-        Uri.parse(webhookUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(transaction.toSheetJson()),
-      );
+      final response = await _client
+          .post(
+            Uri.parse(webhookUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(transaction.toSheetJson()),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) return false;
 

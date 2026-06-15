@@ -18,6 +18,7 @@ void main() {
     LocalStorageService.instance = LocalStorageService(
       dbName: ':memory:',
       databaseFactory: databaseFactoryFfi,
+      password: '',
     );
     storage = LocalStorageService.instance;
 

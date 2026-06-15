@@ -10,7 +10,6 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../main.dart' show navigatorKey;
 import '../core/constants.dart';
 import '../models/transaction.dart';
-import '../services/local_storage_service.dart';
 
 class NotificationService {
   NotificationService._();
@@ -20,8 +19,10 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _timeZonesReady = false;
+  static bool _isBackground = false;
 
-  Future<bool> initialise() async {
+  Future<bool> initialise({bool isBackground = false}) async {
+    _isBackground = isBackground;
     await _ensureTimeZones();
 
     const settings = InitializationSettings(
@@ -43,7 +44,14 @@ class NotificationService {
 
     final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
+
+    // Channel creation is safe and recommended even in background
     await androidPlugin?.createNotificationChannel(channel);
+
+    if (isBackground) {
+      return true;
+    }
+
     final granted = await androidPlugin?.requestNotificationsPermission();
 
     final launchDetails = await _plugin.getNotificationAppLaunchDetails();
@@ -200,6 +208,11 @@ class NotificationService {
 
     final nav = navigatorKey.currentState;
     if (nav == null) {
+      // If we are in a background isolate, we can't navigate.
+      // Tapping the notification should have already launched/brought the app to foreground,
+      // which will trigger the main isolate's _onTap or launch logic.
+      if (_isBackground) return;
+
       Future<void>.delayed(
         const Duration(milliseconds: 300),
         () => _onTap(response),
@@ -207,18 +220,9 @@ class NotificationService {
       return;
     }
 
-    if (parsed['kind'] == 'digest') {
+    if (parsed['kind'] == 'digest' || parsed['kind'] == 'transaction') {
       await nav.pushNamed('/digest');
       return;
-    }
-
-    final transactionId = parsed['id'] as String?;
-    if (transactionId == null || transactionId.isEmpty) return;
-
-    final transaction =
-        await LocalStorageService.instance.findTransactionById(transactionId);
-    if (transaction != null) {
-      await nav.pushNamed('/popup', arguments: transaction);
     }
   }
 }

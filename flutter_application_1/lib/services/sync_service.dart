@@ -1,6 +1,7 @@
 import '../models/transaction.dart';
 import '../services/sheets_service.dart';
 import '../services/local_storage_service.dart';
+import '../core/constants.dart';
 
 class SyncService {
   final SheetsService _sheets;
@@ -15,6 +16,10 @@ class SyncService {
   static final SyncService instance = SyncService();
 
   Future<bool> syncTransaction(MyTransaction transaction) async {
+    if (transaction.syncStatus == AppConstants.syncIgnored ||
+        transaction.category == AppConstants.categoryIgnored) {
+      return true;
+    }
     final success = await _sheets.logMyTransaction(transaction);
     if (success) {
       await _local.markSynced(transaction.id);
@@ -33,6 +38,10 @@ class SyncService {
     if (retryable.isEmpty) return;
 
     for (final transaction in retryable) {
+      if (transaction.syncStatus == AppConstants.syncIgnored ||
+          transaction.category == AppConstants.categoryIgnored) {
+        continue;
+      }
       final success = await _sheets.logMyTransaction(transaction);
       if (success) {
         await _local.markSynced(transaction.id);

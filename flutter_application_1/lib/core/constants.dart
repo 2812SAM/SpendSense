@@ -9,8 +9,10 @@ class AppConstants {
   static const String claudeVersion = '2023-06-01';
   static const int claudeMaxTokens = 256;
 
-  // SharedPreferences keys
+  // SharedPreferences / SecureStorage keys
+  static const String prefAiProvider = 'ai_provider';
   static const String prefClaudeApiKey = 'claude_api_key';
+  static const String prefGeminiApiKey = 'gemini_api_key';
   static const String prefWebhookUrl = 'webhook_url';
   static const String legacyPrefWebhookUrl = '';
   static const String prefOnboardingDone = 'onboarding_done';
@@ -19,7 +21,7 @@ class AppConstants {
 
   // SQLite
   static const String dbName = 'spendsense.db';
-  static const int dbVersion = 4;
+  static const int dbVersion = 8;
   static const String transactionsTable = 'transactions';
   static const String dbEncryptionKey = 'db_encryption_key';
 
@@ -35,24 +37,38 @@ class AppConstants {
   static const String syncPending = 'pending';
   static const String syncSynced = 'synced';
   static const String syncFailed = 'failed';
+  static const String syncIgnored = 'ignored';
 
-  // SMS filter keywords
-  static const List<String> smsKeywords = [
+  // Special categories
+  static const String categoryIgnored = 'Ignored';
+
+  // SMS filter keywords (Inclusion)
+  static const List<String> smsInclusionKeywords = [
     'debited',
     'deducted',
     'paid',
+    'spent',
     'transferred',
     'sent',
+    'txn of',
+    'transaction of',
     'inr',
     'rs.',
     'rs ',
-    'credited',
-    'upi ref',
-    'upi',
-    'successful',
-    'received',
-    'amount',
     '₹',
+  ];
+
+  // SMS filter keywords (Exclusion/Noise)
+  static const List<String> smsExclusionKeywords = [
+    'credited',
+    'received',
+    'refund',
+    'deposited',
+    'reversal',
+    'otp',
+    'verification',
+    'balance is',
+    'available limit',
   ];
 
   // Default categories

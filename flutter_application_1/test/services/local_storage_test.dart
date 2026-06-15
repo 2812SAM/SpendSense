@@ -16,6 +16,7 @@ void main() {
     storage = LocalStorageService(
       dbName: ':memory:',
       databaseFactory: databaseFactoryFfi,
+      password: '',
     );
     await storage.database;
   });
@@ -166,8 +167,8 @@ void main() {
       await storage.saveCustomCategory('Investment');
 
       final categories = await storage.getCustomCategories();
-      expect(categories, contains('Gym'));
-      expect(categories, contains('Investment'));
+      expect(categories.any((c) => c['name'] == 'Gym'), isTrue);
+      expect(categories.any((c) => c['name'] == 'Investment'), isTrue);
       expect(categories.length, 2);
     });
   });

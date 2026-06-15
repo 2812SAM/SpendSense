@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   provider: ^6.0.0
+  fl_chart: ^0.68.0
 
   # SMS reading (Android only)
   telephony:
@@ -27,6 +28,9 @@ dependencies:
 
   # Voice / speech-to-text
   speech_to_text: ^7.3.0
+
+  # Contact syncing
+  flutter_contacts: ^1.1.9+2
 
   # Permissions (SMS, microphone)
   permission_handler: ^11.2.0

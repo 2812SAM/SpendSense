@@ -1,8 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:spendsense/state/app_state.dart';
 import 'package:spendsense/services/sms_service.dart';
-import 'package:spendsense/services/claude_service.dart';
+import 'package:spendsense/services/ai_service.dart';
 import 'package:spendsense/services/local_storage_service.dart';
 import 'package:spendsense/services/sheets_service.dart';
 import 'package:spendsense/services/notification_service.dart';
@@ -18,7 +19,7 @@ import 'package:spendsense/services/sms_orchestrator.dart';
 
 class MockSmsService extends Mock implements SmsService {}
 
-class MockClaudeService extends Mock implements ClaudeService {}
+class MockAiService extends Mock implements AiService {}
 
 class MockLocalStorageService extends Mock implements LocalStorageService {}
 
@@ -36,10 +37,17 @@ class MockSecureStorageService extends Mock implements SecureStorageService {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+  LocalStorageService.instance = LocalStorageService(
+    dbName: ':memory:',
+    databaseFactory: databaseFactoryFfi,
+    password: '',
+  );
 
   late AppState appState;
   late MockSmsService mockSms;
-  late MockClaudeService mockClaude;
+  late MockAiService mockAi;
   late MockLocalStorageService mockLocal;
   late MockNotificationService mockNotif;
   late MockLocalParserService mockParser;
@@ -64,7 +72,7 @@ void main() {
 
   setUp(() {
     mockSms = MockSmsService();
-    mockClaude = MockClaudeService();
+    mockAi = MockAiService();
     mockLocal = MockLocalStorageService();
     mockNotif = MockNotificationService();
     mockParser = MockLocalParserService();
@@ -79,11 +87,10 @@ void main() {
     );
 
     final orchestrator = SmsOrchestrator(
-      claude: mockClaude,
+      ai: mockAi,
       local: mockLocal,
       notif: mockNotif,
       localParser: mockParser,
-      secure: mockSecure,
       sync: syncService,
       voice: mockVoice,
     );
@@ -131,8 +138,7 @@ void main() {
     when(() => mockLocal.getConfirmedPendingSync()).thenAnswer((_) async => []);
     when(() => mockSheets.logMyTransaction(any()))
         .thenAnswer((_) async => true);
-    when(() => mockClaude.categorise(any(), any()))
-        .thenAnswer((_) async => null);
+    when(() => mockAi.categorise(any(), any())).thenAnswer((_) async => null);
   });
 
   test('Unknown SMS with no Claude key should trigger Manual Review flow',
@@ -269,7 +275,7 @@ void main() {
           lastError: any(named: 'lastError'),
           fingerprint: any(named: 'fingerprint'))).called(1);
       verifyNever(() => mockLocal.lookupMerchant(any()));
-      verifyNever(() => mockClaude.categorise(any(), any()));
+      verifyNever(() => mockAi.categorise(any(), any()));
     });
   });
 

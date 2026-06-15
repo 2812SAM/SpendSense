@@ -10,6 +10,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telephony/telephony.dart';
 
 import '../core/constants.dart';
+import '../models/transaction.dart';
+import 'ai_service.dart';
+import 'local_parser_service.dart';
+import 'local_storage_service.dart';
+import 'notification_service.dart';
+import 'sms_orchestrator.dart';
+import 'sync_service.dart';
+import 'voice_service.dart';
 
 typedef OnPaymentSmsReceived = Future<void> Function(
     String smsBody, String sender);
@@ -58,7 +66,7 @@ class SmsService {
         final body = payload['body'] as String? ?? '';
         final sender = payload['sender'] as String? ?? '';
 
-        if (!_isPaymentSms(body) || _callback == null) continue;
+        if (!isPaymentSms(body) || _callback == null) continue;
         await _callback!.call(body, sender);
       } catch (_) {
         failed.add(entry);
@@ -74,14 +82,21 @@ class SmsService {
     final body = message.body ?? '';
     final sender = message.address ?? '';
 
-    if (_isPaymentSms(body) && _callback != null) {
+    if (isPaymentSms(body) && _callback != null) {
       _callback!.call(body, sender);
     }
   }
 
-  bool _isPaymentSms(String body) {
+  static bool isPaymentSms(String body) {
     final lower = body.toLowerCase();
-    return AppConstants.smsKeywords.any(lower.contains);
+
+    // 1. Check exclusions first (Fail-fast for income, OTPs, etc.)
+    if (AppConstants.smsExclusionKeywords.any(lower.contains)) {
+      return false;
+    }
+
+    // 2. Check inclusions (Ensure it's a transactional/debit message)
+    return AppConstants.smsInclusionKeywords.any(lower.contains);
   }
 
   Future<List<SmsMessage>> fetchRecentPaymentSms({int limit = 50}) async {
@@ -91,7 +106,7 @@ class SmsService {
     );
 
     return messages
-        .where((m) => _isPaymentSms(m.body ?? ''))
+        .where((m) => isPaymentSms(m.body ?? ''))
         .take(limit)
         .toList();
   }
@@ -99,22 +114,154 @@ class SmsService {
 
 @pragma('vm:entry-point')
 Future<void> _backgroundSmsHandler(SmsMessage message) async {
-  WidgetsFlutterBinding.ensureInitialized();
-  DartPluginRegistrant.ensureInitialized();
+  debugPrint('SpendSense: Background Isolate Waking Up...');
 
-  final body = message.body ?? '';
-  final sender = message.address ?? '';
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    DartPluginRegistrant.ensureInitialized();
 
-  if (!SmsService.instance._isPaymentSms(body)) {
-    return;
+    final body = message.body ?? '';
+    final sender = message.address ?? '';
+    debugPrint('SpendSense: SMS Received from $sender');
+
+    if (!SmsService.isPaymentSms(body)) {
+      debugPrint('SpendSense: SMS ignored (not a payment message).');
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+
+    // SPEND-013: Simple Mutex to prevent simultaneous DB/Prefs access
+    final isProcessing = prefs.getBool('is_processing_sms') ?? false;
+    if (isProcessing) {
+      debugPrint('SpendSense: Background already busy. Queuing SMS for later.');
+      final queue =
+          prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
+      queue.add(jsonEncode({
+        'body': body,
+        'sender': sender,
+        'received_at': DateTime.now().millisecondsSinceEpoch,
+      }));
+      await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, queue);
+      return;
+    }
+
+    // Set Lock
+    await prefs.setBool('is_processing_sms', true);
+
+    try {
+      debugPrint('SpendSense: Initializing headless services...');
+      // 1. Initialize Headless Services
+      final localStorage = LocalStorageService(isBackground: true);
+      final notificationService = NotificationService.instance;
+      final aiService = AiService.instance;
+      final voiceService = VoiceService.instance;
+      final localParser = LocalParserService.instance;
+
+      // 2. Open Secure Database
+      debugPrint('SpendSense: Unlocking secure database in background...');
+      await localStorage.database;
+      debugPrint('SpendSense: Database unlocked.');
+
+      // Initialize notifications for transaction popups
+      await notificationService.initialise(isBackground: true);
+
+      // 3. Fetch categories (Core + User Defined)
+      final customCategories = await localStorage.getCustomCategories();
+      final allCategories = <String>[
+        ...AppConstants.defaultCategories,
+        ...customCategories.map((c) => c['name'] as String),
+      ];
+
+      // 4. Initialize Orchestrator with Background-Safe Sync
+      final orchestrator = SmsOrchestrator(
+        ai: aiService,
+        local: localStorage,
+        notif: notificationService,
+        localParser: localParser,
+        sync: _BackgroundNoOpSyncService(local: localStorage),
+        voice: voiceService,
+      );
+
+      // 5. Run full waterfall logic
+      debugPrint('SpendSense: Starting waterfall processing...');
+      await orchestrator.processSms(body, sender, allCategories: allCategories);
+      debugPrint('SpendSense: Background processing completed successfully.');
+
+      // Also process any previously queued messages while we have the DB open
+      await _processQueuedMessagesHeadless(orchestrator, allCategories);
+    } finally {
+      // Release Lock
+      await prefs.setBool('is_processing_sms', false);
+    }
+  } catch (e, stack) {
+    debugPrint('SpendSense CRITICAL: Background processing failed: $e');
+    debugPrint(stack.toString());
+
+    // Fallback: Queue for foreground processing if background fails
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final queue =
+          prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
+      queue.add(jsonEncode({
+        'body': message.body,
+        'sender': message.address,
+        'received_at': DateTime.now().millisecondsSinceEpoch,
+        'error': e.toString(),
+      }));
+      await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, queue);
+      debugPrint('SpendSense: SMS queued for foreground retry.');
+    } catch (e2) {
+      debugPrint('SpendSense: Fatal error during fallback queuing: $e2');
+    }
   }
+}
 
+Future<void> _processQueuedMessagesHeadless(
+    SmsOrchestrator orchestrator, List<String> allCategories) async {
   final prefs = await SharedPreferences.getInstance();
   final queue = prefs.getStringList(AppConstants.prefBackgroundSmsQueue) ?? [];
-  queue.add(jsonEncode({
-    'body': body,
-    'sender': sender,
-    'received_at': DateTime.now().millisecondsSinceEpoch,
-  }));
-  await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, queue);
+  if (queue.isEmpty) return;
+
+  debugPrint(
+      'SpendSense: Processing ${queue.length} queued messages in background...');
+  await prefs.remove(AppConstants.prefBackgroundSmsQueue);
+
+  final failed = <String>[];
+
+  for (final entry in queue) {
+    try {
+      final payload = jsonDecode(entry) as Map<String, dynamic>;
+      final body = payload['body'] as String? ?? '';
+      final sender = payload['sender'] as String? ?? '';
+
+      if (!SmsService.isPaymentSms(body)) continue;
+      await orchestrator.processSms(body, sender, allCategories: allCategories);
+    } catch (e) {
+      debugPrint('SpendSense: Headless retry failed: $e');
+      failed.add(entry);
+    }
+  }
+
+  if (failed.isNotEmpty) {
+    await prefs.setStringList(AppConstants.prefBackgroundSmsQueue, failed);
+  }
+}
+
+/// Specialized SyncService for background processing.
+/// Prevents expensive network calls to Google Sheets to save battery and data.
+class _BackgroundNoOpSyncService extends SyncService {
+  _BackgroundNoOpSyncService({super.local});
+
+  @override
+  Future<bool> syncTransaction(MyTransaction transaction) async {
+    // Return false to keep status as 'pending'.
+    // The orchestrator will already have saved it to SQLite.
+    return false;
+  }
+
+  @override
+  Future<void> retryUnsyncedTransactions() async {
+    // No-op to avoid background network activity.
+  }
 }

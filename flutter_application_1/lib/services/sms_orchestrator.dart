@@ -1,13 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import '../models/transaction.dart';
-import '../services/claude_service.dart';
+import '../services/ai_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/local_parser_service.dart';
-import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 import '../services/voice_service.dart';
+import '../services/contact_service.dart';
 import '../core/constants.dart';
 
 enum SmsProcessingResult {
@@ -18,29 +20,29 @@ enum SmsProcessingResult {
 }
 
 class SmsOrchestrator {
-  final ClaudeService _claude;
+  final AiService _ai;
   final LocalStorageService _local;
   final NotificationService _notif;
   final LocalParserService _localParser;
-  final SecureStorageService _secure;
   final SyncService _sync;
   final VoiceService _voice;
+  final ContactService _contacts;
 
   SmsOrchestrator({
-    ClaudeService? claude,
+    AiService? ai,
     LocalStorageService? local,
     NotificationService? notif,
     LocalParserService? localParser,
-    SecureStorageService? secure,
     SyncService? sync,
     VoiceService? voice,
-  })  : _claude = claude ?? ClaudeService.instance,
+    ContactService? contacts,
+  })  : _ai = ai ?? AiService.instance,
         _local = local ?? LocalStorageService.instance,
         _notif = notif ?? NotificationService.instance,
         _localParser = localParser ?? LocalParserService.instance,
-        _secure = secure ?? SecureStorageService.instance,
         _sync = sync ?? SyncService.instance,
-        _voice = voice ?? VoiceService.instance;
+        _voice = voice ?? VoiceService.instance,
+        _contacts = contacts ?? ContactService.instance;
 
   static final SmsOrchestrator instance = SmsOrchestrator();
 
@@ -50,7 +52,11 @@ class SmsOrchestrator {
     required List<String> allCategories,
     Function(MyTransaction)? onTransactionFound,
   }) async {
-    // 0. Deduplication check
+    // 0. Resolve Contact Name
+    final resolvedSenderName = await _contacts.resolveName(sender);
+    final effectiveSender = resolvedSenderName ?? sender;
+
+    // 0.1 Deduplication check
     final fingerprint = generateFingerprint(smsBody, sender);
     final existing = await _local.findByFingerprint(fingerprint);
     if (existing != null) {
@@ -129,43 +135,41 @@ class SmsOrchestrator {
       }
     }
 
-    // 3. Try Claude AI
-    final apiKey = await _secure.readSecret(AppConstants.prefClaudeApiKey);
-    if (apiKey != null && apiKey.isNotEmpty) {
-      final transaction = await _claude.categorise(smsBody, allCategories);
+    // 3. Try AI Engine
+    final contextSms = 'From: $effectiveSender\nBody: $smsBody';
+    final transaction = await _ai.categorise(contextSms, allCategories);
 
-      if (transaction != null) {
-        onTransactionFound?.call(transaction);
+    if (transaction != null) {
+      onTransactionFound?.call(transaction);
 
-        if (transaction.confidence == AppConstants.confidenceHigh) {
-          final confirmed = transaction.copyWith(isConfirmed: true);
-          await _local.upsertTransaction(
-            confirmed,
-            needsUserInput: false,
-            sender: sender,
-            syncStatus: AppConstants.syncPending,
-            fingerprint: fingerprint,
-          );
-          await _sync.syncTransaction(confirmed);
-          return SmsProcessingResult.autoLogged;
-        }
-
+      if (transaction.confidence == AppConstants.confidenceHigh) {
+        final confirmed = transaction.copyWith(isConfirmed: true);
         await _local.upsertTransaction(
-          transaction,
-          needsUserInput: true,
+          confirmed,
+          needsUserInput: false,
           sender: sender,
           syncStatus: AppConstants.syncPending,
           fingerprint: fingerprint,
         );
-        await _notif.showTransactionPopup(transaction);
-        return SmsProcessingResult.awaitingUser;
+        await _sync.syncTransaction(confirmed);
+        return SmsProcessingResult.autoLogged;
       }
+
+      await _local.upsertTransaction(
+        transaction,
+        needsUserInput: true,
+        sender: sender,
+        syncStatus: AppConstants.syncPending,
+        fingerprint: fingerprint,
+      );
+      await _notif.showTransactionPopup(transaction);
+      return SmsProcessingResult.awaitingUser;
     }
 
     // 4. Fallback to Manual Review
     final fallback = MyTransaction.manualReview(
       rawSms: smsBody,
-      merchant: _fallbackMerchantName(smsBody, sender),
+      merchant: _fallbackMerchantName(smsBody, effectiveSender),
       amount: _quickParseAmount(smsBody),
     );
 
@@ -188,30 +192,50 @@ class SmsOrchestrator {
     String category, {
     bool isDynamic = false,
   }) async {
-    final resolvedType =
-        category == 'Loan' ? AppConstants.typeLoan : transaction.type;
-    final resolvedCategory = category == 'Loan' ? 'Loan' : category;
+    try {
+      if (category == AppConstants.categoryIgnored) {
+        await _local.upsertTransaction(
+          transaction.copyWith(
+            category: AppConstants.categoryIgnored,
+            isConfirmed: false,
+            syncStatus: AppConstants.syncIgnored,
+          ),
+          needsUserInput: false,
+        );
+        await _notif.dismissTransactionNotification(transaction.id);
+        return;
+      }
 
-    final confirmed = transaction.copyWith(
-      category: resolvedCategory,
-      type: resolvedType,
-      isConfirmed: true,
-    );
+      final resolvedType =
+          category == 'Loan' ? AppConstants.typeLoan : transaction.type;
+      final resolvedCategory = category == 'Loan' ? 'Loan' : category;
 
-    await _local.markConfirmed(
-      transaction.id,
-      category: resolvedCategory,
-      type: resolvedType,
-      note: confirmed.note,
-    );
-    await _local.saveMerchantMemory(
-      transaction.merchant,
-      resolvedCategory,
-      resolvedType,
-      isDynamic: isDynamic,
-    );
-    await _notif.dismissTransactionNotification(transaction.id);
-    await _sync.syncTransaction(confirmed);
+      final confirmed = transaction.copyWith(
+        category: resolvedCategory,
+        type: resolvedType,
+        isConfirmed: true,
+      );
+
+      await _local.markConfirmed(
+        transaction.id,
+        category: resolvedCategory,
+        type: resolvedType,
+        note: confirmed.note,
+      );
+      await _local.saveMerchantMemory(
+        transaction.merchant,
+        resolvedCategory,
+        resolvedType,
+        isDynamic: isDynamic,
+      );
+      await _notif.dismissTransactionNotification(transaction.id);
+
+      // SYNC: Non-blocking background call
+      unawaited(_sync.syncTransaction(confirmed));
+    } catch (e) {
+      debugPrint('SpendSense Error: Failed to confirm category: $e');
+      rethrow;
+    }
   }
 
   Future<MyTransaction?> confirmWithVoice(
@@ -225,8 +249,8 @@ class SmsOrchestrator {
 
     if (voiceText == null || voiceText.isEmpty) return null;
 
-    final understood = await _claude.understandVoiceNote(
-        voiceText, transaction, allCategories);
+    final understood =
+        await _ai.understandVoiceNote(voiceText, transaction, allCategories);
     final category = understood['category'] ?? 'Others';
     final type = understood['type'] ?? AppConstants.typeExpense;
     final note = understood['note'] ?? voiceText;
@@ -250,7 +274,10 @@ class SmsOrchestrator {
       needsUserInput: false,
       syncStatus: AppConstants.syncPending,
     );
-    await _sync.syncTransaction(confirmed);
+
+    // SYNC: Non-blocking background call
+    unawaited(_sync.syncTransaction(confirmed));
+
     return confirmed;
   }
 
@@ -260,8 +287,12 @@ class SmsOrchestrator {
     Map<String, bool>? dynamicMap,
   }) async {
     for (final transaction in pendingTransactions) {
-      final category = categoryMap[transaction.id] ?? 'Others';
+      if (!categoryMap.containsKey(transaction.id)) continue;
+
+      final category = categoryMap[transaction.id]!;
       final isDynamic = dynamicMap?[transaction.id] ?? false;
+
+      // confirmCategory is now non-blocking for sync
       await confirmCategory(transaction, category, isDynamic: isDynamic);
     }
     await _notif.dismissDigestNotification();
@@ -272,7 +303,10 @@ class SmsOrchestrator {
     return sha256.convert(bytes).toString();
   }
 
-  String _generateId() => DateTime.now().millisecondsSinceEpoch.toString();
+  String _generateId() {
+    final now = DateTime.now();
+    return '${now.millisecondsSinceEpoch}_${now.microsecondsSinceEpoch % 1000}';
+  }
 
   String _extractMerchantHint(String sms) {
     final match = RegExp(

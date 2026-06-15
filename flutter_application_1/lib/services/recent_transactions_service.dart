@@ -10,7 +10,11 @@ class RecentTransactionsService {
       RecentTransactionsService._();
 
   Future<List<MyTransaction>> fetchRecent({int limit = 30}) async {
-    return LocalStorageService.instance.getRecentConfirmed(limit: limit);
+    final transactions =
+        await LocalStorageService.instance.getRecentConfirmed(limit: limit);
+    return transactions
+        .where((tx) => tx.category != AppConstants.categoryIgnored)
+        .toList();
   }
 
   Future<List<AggregatedTransaction>> fetchAggregatedRecent() async {
@@ -19,6 +23,7 @@ class RecentTransactionsService {
     final latestTimestamps = <String, DateTime>{};
 
     for (final tx in transactions) {
+      if (tx.category == AppConstants.categoryIgnored) continue;
       groups[tx.category] = (groups[tx.category] ?? 0) + tx.amount;
       final currentLatest = latestTimestamps[tx.category];
       if (currentLatest == null || tx.timestamp.isAfter(currentLatest)) {
@@ -46,8 +51,13 @@ class RecentTransactionsService {
 
     final results = await db.query(
       AppConstants.transactionsTable,
-      where: 'is_confirmed = 1 AND timestamp >= ? AND type = ?',
-      whereArgs: [start, AppConstants.typeExpense],
+      where:
+          'is_confirmed = 1 AND timestamp >= ? AND type = ? AND category != ?',
+      whereArgs: [
+        start,
+        AppConstants.typeExpense,
+        AppConstants.categoryIgnored
+      ],
     );
 
     double total = 0;
@@ -66,6 +76,48 @@ class RecentTransactionsService {
       txCount: results.length,
       month: now,
     );
+  }
+
+  Future<List<double>> fetchTrendData() async {
+    final db = await LocalStorageService.instance.database;
+    final now = DateTime.now();
+    // Fetch last 7 days of spending
+    final sevenDaysAgo =
+        now.subtract(const Duration(days: 6)).millisecondsSinceEpoch;
+
+    final results = await db.query(
+      AppConstants.transactionsTable,
+      where:
+          'is_confirmed = 1 AND timestamp >= ? AND type = ? AND category != ?',
+      whereArgs: [
+        sevenDaysAgo,
+        AppConstants.typeExpense,
+        AppConstants.categoryIgnored
+      ],
+      orderBy: 'timestamp ASC',
+    );
+
+    final dailySpending = <int, double>{};
+    for (var i = 0; i < 7; i++) {
+      final day = now.subtract(Duration(days: i));
+      final dayKey =
+          DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
+      dailySpending[dayKey] = 0;
+    }
+
+    for (final row in results) {
+      final timestamp = row['timestamp'] as int;
+      final amount = (row['amount'] as num).toDouble();
+      final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      final dayKey = DateTime(dt.year, dt.month, dt.day).millisecondsSinceEpoch;
+      if (dailySpending.containsKey(dayKey)) {
+        dailySpending[dayKey] = dailySpending[dayKey]! + amount;
+      }
+    }
+
+    // Sort keys and return values
+    final sortedKeys = dailySpending.keys.toList()..sort();
+    return sortedKeys.map((key) => dailySpending[key]!).toList();
   }
 }
 

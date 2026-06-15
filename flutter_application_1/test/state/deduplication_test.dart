@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:spendsense/state/app_state.dart';
 import 'package:spendsense/services/sms_service.dart';
-import 'package:spendsense/services/claude_service.dart';
+import 'package:spendsense/services/ai_service.dart';
 import 'package:spendsense/services/local_storage_service.dart';
 import 'package:spendsense/services/sheets_service.dart';
 import 'package:spendsense/services/notification_service.dart';
@@ -13,7 +13,7 @@ import 'package:spendsense/services/secure_storage_service.dart';
 
 class MockSmsService extends Mock implements SmsService {}
 
-class MockClaudeService extends Mock implements ClaudeService {}
+class MockAiService extends Mock implements AiService {}
 
 class MockLocalStorageService extends Mock implements LocalStorageService {}
 
