@@ -33,8 +33,10 @@ class VoiceService {
       onResult: (r) {
         if (r.finalResult) result = r.recognizedWords;
       },
-      listenFor: timeout,
-      localeId: 'en_IN', // Indian English
+      listenOptions: SpeechListenOptions(
+        listenFor: timeout,
+        localeId: 'en_IN', // Indian English
+      ),
     );
 
     // Wait for result or timeout
