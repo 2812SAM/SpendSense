@@ -144,14 +144,13 @@ This matters because the SMS filter is broad, so some credited or received-money
 | `android/` | Android app wrapper and manifest/build config | Most relevant platform folder because SMS is Android-only |
 | `ios/` | iOS Flutter scaffold | Product is not functionally complete on iOS because SMS ingestion is Android-only |
 | `macos/`, `linux/`, `windows/`, `web/` | Generated Flutter platform scaffolding | Useful only for packaging or future non-core expansion |
-| `test/` | Flutter/Dart tests | Currently very light coverage |
+| `test/` | Flutter/Dart tests | Strong service/model/state coverage plus focused widget tests; see `integration_test/` for the current integration smoke test |
 | `build/` | Generated build outputs | Not source of truth, should not be used as design context |
 | `README.md` | Lightweight project overview | Good quick start, not a full architecture doc |
-| `SpendSense_Codebase_TODO.md` | Earlier flaw inventory and design TODOs | Historical context |
-| `SpendSense_Alpha_Launch_Checklist.md` | Alpha readiness checklist | Useful operational checklist |
+| `docs/development/codebase-todo.md` | Current flaw inventory and design TODOs | Planning reference |
+| `docs/decisions/alpha-launch-checklist.md` | Alpha readiness checklist | Useful operational checklist |
 | `analysis_options.yaml` | Dart analyzer settings | Includes one lint suppression for library doc comments |
 | `pubspec.yaml` | Flutter dependencies and metadata | Defines app packages and build inputs |
-| `android_manifest_additions.xml` | Legacy/reference manifest snippet | No longer the live manifest; can confuse future developers |
 
 ## Source ownership by folder
 
@@ -225,7 +224,9 @@ It currently contains:
 
 Important details:
 
-- DB version is `2`.
+- DB version is `4`.
+- v3 added the `custom_categories` table to support user-defined category management.
+- v4 added the `merchant_memory.is_dynamic` column to distinguish person-style merchants from static merchant labels.
 - The app uses a fixed digest schedule of 9:00 PM India time through `digestHour`, `digestMinute`, and `digestTimeZone`.
 - `prefDigestTime` exists but is not currently wired into any settings UI or runtime scheduling logic.
 - `legacyPrefWebhookUrl` is unusual: it stores the old literal preference key/value path from a previous build, and the app still attempts migration from it.
@@ -575,15 +576,19 @@ It helps catch many transaction messages, but it also creates false-positive ris
 
 ### Important practical limitation
 
-The app does not currently implement deterministic deduplication.
+The app now implements deterministic deduplication using SHA-256 fingerprints generated in `AppState` and checked through `LocalStorageService.findByFingerprint(...)`.
 
-That means duplicate processing is possible if:
+That materially reduces duplicate processing risk for:
 
-- the same SMS is received twice
-- a message is processed in foreground and again through a queued background path
-- a user restores or replays inbox messages in a future backfill flow
+- identical SMS delivered twice
+- the same message being seen in foreground and again through the queued background path
+- repeated processing of the same normalized sender/body payload
 
-This is one of the most important next hardening tasks.
+Remaining hardening work is at the next layer, not the first one:
+
+- extracting bank reference IDs / UTRs for even stronger duplicate detection
+- keeping future inbox backfill paths aligned with the same fingerprinting contract
+- making the Google Sheets sync path idempotent so transport retries cannot create duplicate cloud rows
 
 ## 5.9 Voice input
 
@@ -1450,7 +1455,6 @@ These are the main architectural and product gaps still visible after the curren
 - no logging/telemetry/crash reporting
 - no release signing setup
 - some dependencies appear unused
-- legacy helper file `android_manifest_additions.xml` should be cleaned up or archived
 
 ## 11. Recommended Next Steps
 

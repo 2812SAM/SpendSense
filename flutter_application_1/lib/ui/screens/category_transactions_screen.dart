@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../models/transaction.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/category_service.dart';
@@ -96,8 +95,7 @@ class _CategoryTransactionsScreenState
   }
 
   Widget _buildTransactionItem(MyTransaction tx) {
-    final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
-    final dateStr = dateFormat.format(tx.timestamp);
+    final dateStr = _formatDate(tx.timestamp);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -154,5 +152,28 @@ class _CategoryTransactionsScreenState
         ],
       ),
     );
+  }
+
+  String _formatDate(DateTime timestamp) {
+    const months = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = timestamp.hour % 12 == 0 ? 12 : timestamp.hour % 12;
+    final minute = timestamp.minute.toString().padLeft(2, '0');
+    final suffix = timestamp.hour >= 12 ? 'PM' : 'AM';
+    final day = timestamp.day.toString().padLeft(2, '0');
+    final month = months[timestamp.month - 1];
+    return '$day $month ${timestamp.year}, $hour:$minute $suffix';
   }
 }

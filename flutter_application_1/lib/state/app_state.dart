@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../core/constants.dart';
 import '../models/transaction.dart';
@@ -68,7 +67,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool _isVoiceListening = false;
   bool _isSmsReady = false;
   bool _notificationsReady = false;
-  bool _isBatteryOptimized = false;
   String? _errorMessage;
 
   TxState get txState => _txState;
@@ -82,7 +80,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool get isVoiceListening => _isVoiceListening;
   bool get isSmsReady => _isSmsReady;
   bool get notificationsReady => _notificationsReady;
-  bool get isBatteryOptimized => _isBatteryOptimized;
   String? get errorMessage => _errorMessage;
 
   Future<void> initialise() async {
@@ -98,9 +95,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await ContactService.instance.initialise();
       _isSmsReady = await _sms.initialise(_onPaymentSmsReceived);
       _customCategories = await _local.getCustomCategories();
-
-      // Check for battery optimization
-      _isBatteryOptimized = await _checkBatteryOptimization();
 
       await _sms.processQueuedMessages();
       await _sync.retryUnsyncedTransactions();
@@ -284,20 +278,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     // Force a fresh fetch just to be sure
     await refreshInsights();
-  }
-
-  /// Checks if the app is currently battery optimized.
-  Future<bool> _checkBatteryOptimization() async {
-    final status = await Permission.ignoreBatteryOptimizations.status;
-    return status != PermissionStatus.granted;
-  }
-
-  /// Requests the user to disable battery optimization for the app.
-  Future<void> requestIgnoreBatteryOptimizations() async {
-    if (await Permission.ignoreBatteryOptimizations.request().isGranted) {
-      _isBatteryOptimized = false;
-      notifyListeners();
-    }
   }
 
   @override
