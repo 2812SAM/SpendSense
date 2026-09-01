@@ -32,21 +32,12 @@ dependencies:
   # Contact syncing
   flutter_contacts: ^1.1.9+2
 
-  # Permissions (SMS, microphone)
-  permission_handler: ^11.2.0
-
   # Simple key-value storage (API key, webhook URL, settings)
   shared_preferences: ^2.2.2
   flutter_secure_storage: ^9.0.0
 
   # Secure hashing for deduplication
   crypto: ^3.0.3
-
-  # Date formatting
-  intl: ^0.19.0
-
-  # JSON parsing helpers
-  json_annotation: ^4.8.1
 
   # Notification scheduling
   timezone: ^0.9.4
@@ -59,8 +50,6 @@ dev_dependencies:
   mocktail: ^1.0.3
   sqflite_common_ffi: ^2.3.0
   flutter_lints: ^3.0.0
-  build_runner: ^2.4.7
-  json_serializable: ^6.7.1
 
 flutter:
   uses-material-design: true

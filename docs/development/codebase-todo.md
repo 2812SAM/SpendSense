@@ -22,8 +22,11 @@ SpendSense is pivoting from a **Cloud-First (Claude/Sheets)** requirement to a *
 ## P1 Priority - Professionalism & Connectivity
 
 - [ ] **Google Sign-In Integration.**
+- [ ] **First-Class Income and Refund Transaction Types.**
 - [ ] **Initial Inbox Scan.**
 - [ ] **Background Task Reliability (WorkManager).**
+- [ ] **Real SMS Ingestion Reliability.**
+  Impact: Finish hardening real-device broadcast/queue behavior so live payment SMS are captured consistently outside simulation paths.
 - [ ] **Foreground Auto-Popup.**
   Impact: Categorization popups now auto-open if the app is active, bypassing system notification suppression.
 - [ ] **Error Reporting (Sentry).**
@@ -34,6 +37,7 @@ SpendSense is pivoting from a **Cloud-First (Claude/Sheets)** requirement to a *
 ## P2 Priority - UX and Reliability
 
 - [ ] **UI Transaction Grouping/Aggregation.**
+- [ ] **Maestro E2E Test Suite.**
 - [ ] **On-Device AI Exploration (Gemini Nano).**
 - [ ] **Fix Home Screen Live Updates.**
 - [ ] **Database Encryption (SQLCipher).**
@@ -63,16 +67,4 @@ The decision has been made: **SQLite is the primary source of truth.**
 3. **Local Regex Parser** (Replacing mandatory AI).
 4. **Deduplication Logic** (Reliability).
 5. **Background Workmanager for Digest** (Reliability).
-6. **Optional AI/Cloud Toggle in Settings**.
-Manifest Fixes** (Foundation).
-2. **Setup Screen Bypass** (UX Quick Win).
-3. **Local Regex Parser** (Replacing mandatory AI).
-4. **Deduplication Logic** (Reliability).
-5. **Background Workmanager for Digest** (Reliability).
-6. **Optional AI/Cloud Toggle in Settings**.
-gest** (Reliability).
-6. **Optional AI/Cloud Toggle in Settings**.
-bility).
-6. **Optional AI/Cloud Toggle in Settings**.
-gest** (Reliability).
 6. **Optional AI/Cloud Toggle in Settings**.

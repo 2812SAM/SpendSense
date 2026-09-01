@@ -1,50 +1,39 @@
 ---
 name: spendsense-sync
-description: Syncs core project documentation (README, TODO, Context) with recent implementation reports from feature_discussion and audits gaps against industry standards. Use when the user says "Sync" or wants to update docs after a task.
+description: Syncs core project documentation with recent implementation history and audits the repo against the development guide. Use when the user wants docs refreshed after a task.
 ---
 
 # SpendSense Sync & Audit Workflow
 
-This skill ensures that the repository's documentation is always aligned with the latest code changes and industry standards.
+This skill keeps SpendSense documentation aligned with the implemented codebase and the retained historical archive.
 
 ## Workflow
 
 ### 1. Data Collection
-- Identify the folder for **today's date** in `flutter_application_1/feature_discussion/YYYY-MM-DD/`.
-- Read all `*_Execution.md` files within that folder.
-- Identify:
-    - New features implemented.
-    - Logic refactored.
-    - Bugs fixed.
-    - Changes to setup or dependencies.
+- Read the current source of truth documents first:
+  - `flutter_application_1/README.md`
+  - `docs/architecture/repository-context.md`
+  - `docs/development/codebase-todo.md`
+- If historical context is relevant, inspect the archived implementation trail under `docs/archive/feature_discussion/`.
+- Identify new features, behavior changes, bugs fixed, and follow-up risks.
 
 ### 2. Documentation Syncing
-Update the following files **only if** the execution reports contain relevant changes:
+Update these files only when the task actually changed their subject matter:
 
-- **README.md**:
-    - Update "Core Features" if new functionality was added.
-    - Update "Getting Started" if setup steps changed.
-    - Update "Important Files" if new services/models were created.
-
-- **SpendSense_Codebase_TODO.md**:
-    - Mark implemented tasks as `[x]`.
-    - Add new technical debts or future improvements identified during implementation.
-    - Adjust priority levels based on current project maturity.
-
-- **SpendSense_Repository_Context.md**:
-    - Update the **Architecture Diagram** (Mermaid) if data flow changed.
-    - Update **Source of Truth** tables if storage logic shifted.
-    - Update **Component Breakdown** if new services or screens were added.
+- `flutter_application_1/README.md`
+  - Refresh core features, setup, testing, or project-structure pointers.
+- `docs/development/codebase-todo.md`
+  - Mark implemented tasks complete.
+  - Add new technical debt or follow-up work revealed by the change.
+- `docs/architecture/repository-context.md`
+  - Update lifecycle descriptions, source-of-truth tables, and file-responsibility notes.
 
 ### 3. Industry Standards Audit
-- Read `flutter_application_1/feature_discussion/Industry_Standard_App_Development_Guide.md` as a **read-only reference**.
-- Analyze the current state of the repo against the P0, P1, and P2 standards defined in the guide.
-- **Identify Gaps**:
-    - Are new secrets being stored in plain text?
-    - Did new logic get added without unit tests?
-    - Is state management becoming too coupled?
-- **Action**: Add these gaps as new P0/P1 tasks in `SpendSense_Codebase_TODO.md`. **Do not update the Industry Standard guide itself.**
+- Read `docs/development/industry-standard-guide.md` as a read-only standard.
+- Compare the current implementation against the standards.
+- Add any meaningful gaps to `docs/development/codebase-todo.md`.
 
 ## Quality Mandate
-- **Surgical Updates**: Do not overwrite entire files. Use precise `replace` calls to preserve existing history.
-- **Traceability**: Mention the specific execution report (e.g., `Setup_Screen_Removal_Execution.md`) in the edit instruction.
+- Make surgical updates instead of rewriting healthy sections without cause.
+- Use archived `docs/archive/feature_discussion/` notes only as historical evidence, not as a second source of truth.
+- Keep `docs/` authoritative for current documentation.

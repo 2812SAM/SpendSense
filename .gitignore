@@ -105,3 +105,5 @@ test_output/
 .DS_Store
 Thumbs.db
 *.backup
+
+.ai/
