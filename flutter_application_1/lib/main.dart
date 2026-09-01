@@ -9,12 +9,26 @@ import 'package:provider/provider.dart';
 
 import 'models/transaction.dart';
 import 'state/app_state.dart';
+import 'models/user_goals.dart';
+import 'providers/goals_provider.dart';
+import 'providers/insights_provider.dart';
+import 'repositories/goals_repository.dart';
+import 'services/insights/insights_service.dart';
+import 'services/local_storage_service.dart';
 
 import 'ui/screens/home_screen.dart';
+import 'ui/screens/insights.dart';
 import 'ui/screens/setup_screen.dart';
 import 'ui/screens/popup_screen.dart';
 import 'ui/screens/digest_screen.dart';
 import 'ui/screens/developer_tools_screen.dart';
+import 'ui/screens/category_transactions_screen.dart';
+import 'ui/screens/category_management_screen.dart';
+import 'ui/screens/goals_settings_screen.dart';
+
+import 'providers/classification_provider.dart';
+import 'repositories/classification_repository.dart';
+import 'services/insights/classification_detector.dart';
 
 // ── Global navigator key ──────────────────────────────────────────────────
 // Allows NotificationService to navigate without a BuildContext.
@@ -30,8 +44,31 @@ class SpendSenseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppState()..initialise(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => AppState()..initialise(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => GoalsProvider(
+            GoalsRepository(LocalStorageService.instance),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ClassificationProvider(
+            ClassificationRepository(LocalStorageService.instance),
+            ClassificationDetector(),
+          ),
+        ),
+        ChangeNotifierProxyProvider2<GoalsProvider, ClassificationProvider,
+            InsightsProvider>(
+          create: (_) => InsightsProvider(InsightsService(), UserGoals.empty()),
+          update: (_, goalsProvider, classificationsProvider, previous) =>
+              previous!
+                ..onContextUpdated(
+                    goalsProvider.currentGoals, classificationsProvider),
+        ),
+      ],
       child: MaterialApp(
         title: 'SpendSense',
         navigatorKey: navigatorKey,
@@ -49,7 +86,10 @@ class SpendSenseApp extends StatelessWidget {
           '/home': (_) => const HomeScreen(),
           '/setup': (_) => const SetupScreen(isOnboarding: true),
           '/digest': (_) => const DigestScreen(),
+          '/insights': (_) => const InsightsScreen(),
           '/debug': (_) => const DeveloperToolsScreen(),
+          '/manage-categories': (_) => const CategoryManagementScreen(),
+          '/goals-settings': (_) => const GoalsSettingsScreen(),
         },
         onGenerateRoute: (settings) {
           switch (settings.name) {
@@ -60,6 +100,11 @@ class SpendSenseApp extends StatelessWidget {
             case '/setup-settings':
               return MaterialPageRoute(
                   builder: (_) => const SetupScreen(isOnboarding: false));
+            case '/category-details':
+              final category = settings.arguments as String;
+              return MaterialPageRoute(
+                  builder: (_) =>
+                      CategoryTransactionsScreen(category: category));
           }
           return null;
         },

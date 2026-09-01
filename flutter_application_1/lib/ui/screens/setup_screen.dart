@@ -1,11 +1,12 @@
 /// SpendSense - Setup / settings screen.
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants.dart';
-import '../../services/claude_service.dart';
+import '../../services/ai_service.dart';
 import '../../services/sheets_service.dart';
 import '../../services/secure_storage_service.dart';
 
@@ -19,18 +20,22 @@ class SetupScreen extends StatefulWidget {
 }
 
 class _SetupScreenState extends State<SetupScreen> {
-  final _apiKeyCtrl = TextEditingController();
+  final _claudeKeyCtrl = TextEditingController();
+  final _geminiKeyCtrl = TextEditingController();
   final _webhookCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  String _selectedProvider = 'claude';
   bool _isTestingApi = false;
   bool _isTestingWebhook = false;
-  bool _apiKeyOk = false;
+  bool _claudeOk = false;
+  bool _geminiOk = false;
   bool _webhookOk = false;
   bool _isSaving = false;
   String? _apiTestError;
   String? _webhookTestError;
-  String? _lastValidatedApiKey;
+  String? _lastValidatedClaudeKey;
+  String? _lastValidatedGeminiKey;
   String? _lastValidatedWebhook;
 
   @override
@@ -45,23 +50,31 @@ class _SetupScreenState extends State<SetupScreen> {
     // Attempt migration in case AppState hasn't run yet
     await secure.migrateFromPrefs();
 
-
-
-    _apiKeyCtrl.text = await secure.readSecret(AppConstants.prefClaudeApiKey) ?? '';
-    _webhookCtrl.text = await secure.readSecret(AppConstants.prefWebhookUrl) ?? '';
+    _selectedProvider =
+        await secure.readSecret(AppConstants.prefAiProvider) ?? 'claude';
+    _claudeKeyCtrl.text =
+        await secure.readSecret(AppConstants.prefClaudeApiKey) ?? '';
+    _geminiKeyCtrl.text =
+        await secure.readSecret(AppConstants.prefGeminiApiKey) ?? '';
+    _webhookCtrl.text =
+        await secure.readSecret(AppConstants.prefWebhookUrl) ?? '';
 
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _apiKeyCtrl.dispose();
+    _claudeKeyCtrl.dispose();
+    _geminiKeyCtrl.dispose();
     _webhookCtrl.dispose();
     super.dispose();
   }
 
   Future<bool> _testApiKey() async {
-    final apiKey = _apiKeyCtrl.text.trim();
+    final apiKey = _selectedProvider == 'gemini'
+        ? _geminiKeyCtrl.text.trim()
+        : _claudeKeyCtrl.text.trim();
+
     if (apiKey.isEmpty) {
       setState(() => _apiTestError = 'Enter the API key first');
       return false;
@@ -70,18 +83,28 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() {
       _isTestingApi = true;
       _apiTestError = null;
-      _apiKeyOk = false;
+      if (_selectedProvider == 'gemini') {
+        _geminiOk = false;
+      } else {
+        _claudeOk = false;
+      }
     });
 
-    final ok = await ClaudeService.instance.testApiKey(apiKey);
+    final ok = await AiService.instance.testApiKey(_selectedProvider, apiKey);
 
     if (!mounted) return ok;
     setState(() {
       _isTestingApi = false;
-      _apiKeyOk = ok;
-      _apiTestError =
-          ok ? null : 'Claude API test failed - check the key and billing';
-      _lastValidatedApiKey = ok ? apiKey : null;
+      if (_selectedProvider == 'gemini') {
+        _geminiOk = ok;
+        _lastValidatedGeminiKey = ok ? apiKey : null;
+      } else {
+        _claudeOk = ok;
+        _lastValidatedClaudeKey = ok ? apiKey : null;
+      }
+      _apiTestError = ok
+          ? null
+          : '$_selectedProvider API test failed - check the key and billing';
     });
     return ok;
   }
@@ -116,15 +139,24 @@ class _SetupScreenState extends State<SetupScreen> {
   Future<void> _save() async {
     setState(() => _isSaving = true);
 
-    final apiKey = _apiKeyCtrl.text.trim();
+    final claudeKey = _claudeKeyCtrl.text.trim();
+    final geminiKey = _geminiKeyCtrl.text.trim();
     final webhook = _webhookCtrl.text.trim();
 
-    // Only test if not empty
-    if (apiKey.isNotEmpty) {
-      final apiOk = _apiKeyOk && _lastValidatedApiKey == apiKey
+    // Validate the ACTIVE provider's key if not empty
+    if (_selectedProvider == 'claude' && claudeKey.isNotEmpty) {
+      final ok = _claudeOk && _lastValidatedClaudeKey == claudeKey
           ? true
           : await _testApiKey();
-      if (!apiOk) {
+      if (!ok) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
+    } else if (_selectedProvider == 'gemini' && geminiKey.isNotEmpty) {
+      final ok = _geminiOk && _lastValidatedGeminiKey == geminiKey
+          ? true
+          : await _testApiKey();
+      if (!ok) {
         if (mounted) setState(() => _isSaving = false);
         return;
       }
@@ -140,9 +172,13 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     }
 
+    final secure = SecureStorageService.instance;
+    await secure.saveSecret(AppConstants.prefAiProvider, _selectedProvider);
+    await secure.saveSecret(AppConstants.prefClaudeApiKey, claudeKey);
+    await secure.saveSecret(AppConstants.prefGeminiApiKey, geminiKey);
+    await secure.saveSecret(AppConstants.prefWebhookUrl, webhook);
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(AppConstants.prefClaudeApiKey, apiKey);
-    await prefs.setString(AppConstants.prefWebhookUrl, webhook);
     await prefs.remove(AppConstants.legacyPrefWebhookUrl);
     await prefs.setBool(AppConstants.prefOnboardingDone, true);
 
@@ -151,7 +187,8 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() => _isSaving = false);
 
     if (widget.isOnboarding) {
-      Navigator.of(context).pushReplacementNamed('/home');
+      // ignore: unawaited_futures
+      Navigator.of(context).pushReplacementNamed('/goals-settings');
       return;
     }
 
@@ -162,8 +199,9 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: theme.colorScheme.surface,
       appBar: widget.isOnboarding
           ? null
           : AppBar(title: const Text('Setup'), centerTitle: false),
@@ -190,32 +228,63 @@ class _SetupScreenState extends State<SetupScreen> {
                 ],
                 _StepCard(
                   step: '1',
-                  title: 'Claude AI (Optional)',
+                  title: 'AI Engine (Optional)',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Enable high-accuracy categorization for complex SMS. Get your key from console.anthropic.com.',
+                        'Enable high-accuracy categorization for complex SMS.',
                         style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _apiKeyCtrl,
-                        obscureText: true,
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedProvider,
                         decoration: const InputDecoration(
-                          hintText: 'sk-ant-api03-... (Optional)',
+                          labelText: 'Select AI Provider',
                           border: OutlineInputBorder(),
                           isDense: true,
-                          suffixIcon: Icon(Icons.vpn_key_outlined, size: 18),
                         ),
-                        onChanged: (_) {
-                          setState(() {
-                            _apiKeyOk = false;
-                            _lastValidatedApiKey = null;
-                          });
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'claude',
+                              child: Text('Claude (Anthropic)')),
+                          DropdownMenuItem(
+                              value: 'gemini', child: Text('Gemini (Google)')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedProvider = val);
+                          }
                         },
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 16),
+                      if (_selectedProvider == 'claude')
+                        TextFormField(
+                          controller: _claudeKeyCtrl,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            hintText: 'Enter Claude API Key',
+                            labelText: 'Claude API Key',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: Icon(Icons.vpn_key_outlined, size: 18),
+                          ),
+                          onChanged: (_) => setState(() => _claudeOk = false),
+                        )
+                      else
+                        TextFormField(
+                          controller: _geminiKeyCtrl,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            hintText: 'Enter Gemini API Key',
+                            labelText: 'Gemini API Key',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: Icon(Icons.vpn_key_outlined, size: 18),
+                          ),
+                          onChanged: (_) => setState(() => _geminiOk = false),
+                        ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           OutlinedButton.icon(
@@ -228,11 +297,13 @@ class _SetupScreenState extends State<SetupScreen> {
                                         strokeWidth: 2),
                                   )
                                 : const Icon(Icons.bolt, size: 16),
-                            label: Text(
-                                _isTestingApi ? 'Testing...' : 'Test Claude'),
+                            label: Text(_isTestingApi
+                                ? 'Testing...'
+                                : 'Test Connection'),
                           ),
                           const SizedBox(width: 10),
-                          if (_apiKeyOk)
+                          if ((_selectedProvider == 'claude' && _claudeOk) ||
+                              (_selectedProvider == 'gemini' && _geminiOk))
                             const Row(
                               children: [
                                 Icon(Icons.check_circle,
@@ -333,11 +404,45 @@ class _SetupScreenState extends State<SetupScreen> {
                   const SizedBox(height: 16),
                   const Divider(),
                   ListTile(
-                    leading: const Icon(Icons.bug_report_outlined, color: Colors.orange),
+                    leading: const Icon(Icons.bug_report_outlined,
+                        color: Colors.orange),
                     title: const Text('Developer Options'),
-                    subtitle: const Text('Simulate SMS and test sync reliability'),
+                    subtitle:
+                        const Text('Simulate SMS and test sync reliability'),
                     trailing: const Icon(Icons.chevron_right),
+                    // ignore: unawaited_futures
                     onTap: () => Navigator.pushNamed(context, '/debug'),
+                  ),
+                ],
+                if (!widget.isOnboarding) ...[
+                  const SizedBox(height: 16),
+                  _StepCard(
+                    step: '3',
+                    title: 'Spending Goals',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.track_changes_outlined),
+                      title: const Text('Set Monthly Limits'),
+                      subtitle: const Text(
+                          'Adjust your overall and category targets'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          Navigator.pushNamed(context, '/goals-settings'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _StepCard(
+                    step: '4',
+                    title: 'Categorisation',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.category_outlined),
+                      title: const Text('Manage Categories'),
+                      subtitle: const Text('Add, rename or delete categories'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          Navigator.pushNamed(context, '/manage-categories'),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 32),

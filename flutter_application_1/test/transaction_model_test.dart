@@ -73,18 +73,26 @@ void main() {
         'type': 'EXPENSE',
         'note': 'Dinner'
       };
-      
+
       final tx = MyTransaction.fromClaudeResponse(claudeJson, 'Raw SMS Text');
 
       expect(tx.amount, 250.50);
       expect(tx.merchant, 'Zomato');
-      expect(tx.isConfirmed, isFalse); // Claude responses need user confirmation or high-confidence check in AppState
+      expect(tx.isConfirmed,
+          isFalse); // Claude responses need user confirmation or high-confidence check in AppState
     });
 
     test('copyWith should allow partial updates', () {
       final tx = MyTransaction(
-        id: '1', timestamp: DateTime.now(), amount: 10, merchant: 'M',
-        category: 'Others', confidence: 'LOW', type: 'EXPENSE', note: '', rawSms: '',
+        id: '1',
+        timestamp: DateTime.now(),
+        amount: 10,
+        merchant: 'M',
+        category: 'Others',
+        confidence: 'LOW',
+        type: 'EXPENSE',
+        note: '',
+        rawSms: '',
       );
 
       final updated = tx.copyWith(category: 'Food', isConfirmed: true);

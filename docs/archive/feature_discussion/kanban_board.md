@@ -1,0 +1,14 @@
+# SpendSense Agile Kanban Board
+
+| ID | Task | Status | Owner | Link |
+|:---|:---|:---:|:---:|:---|
+| SPEND-001 | Implement Income and Refund transaction types | [TODO] | PM | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-002 | Refactor AppState into domain services | [DONE] | FlutterDev | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-003 | Add Maestro E2E test suite | [TODO] | QA | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-004 | Implement Unique Notification IDs for back-to-back alerts | [DONE] | UX | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-005 | Encrypt SQLite database with SQLCipher | [DONE] | SecOps/FlutterDev | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-006 | Setup GitHub Actions for automated testing | [DONE] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-007 | Implement Idempotency in Google Sheets Sync | [CANCELLED] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-008 | Implement Pre-Commit Hook (Lint, Format, Test, Secrets) | [DONE] | DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-009 | Native Google Sheets Integration (OAuth 2.0) | [TODO] | FlutterDev/DevOps | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |
+| SPEND-010 | Fix Real SMS Ingestion (Broadcast Receiver Failure) | [IN PROGRESS] | Android Specialist/FlutterDev | [2026-04-25_DSM.md](./dsm_logs/2026-04-25_DSM.md) |

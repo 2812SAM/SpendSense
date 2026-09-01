@@ -1,6 +1,10 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  exclude:
+    - plugins/**
+    - build/**
+    - .dart_tool/**
   errors:
     dangling_library_doc_comments: ignore
     missing_required_param: error
@@ -10,7 +14,6 @@ analyzer:
 linter:
   rules:
     - always_declare_return_types
-    - always_require_non_null_named_parameters
     - annotate_overrides
     - avoid_init_to_null
     - avoid_null_checks_in_equality_operators

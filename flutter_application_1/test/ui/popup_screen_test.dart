@@ -6,29 +6,47 @@ import 'package:spendsense/models/transaction.dart';
 import 'package:spendsense/state/app_state.dart';
 import 'package:spendsense/ui/screens/popup_screen.dart';
 
+import 'package:spendsense/providers/classification_provider.dart';
+import 'package:spendsense/models/expense_classification.dart';
+
 class MockAppState extends Mock implements AppState {}
+
+class MockClassificationProvider extends Mock
+    implements ClassificationProvider {}
 
 void main() {
   late MockAppState mockAppState;
+  late MockClassificationProvider mockCP;
 
   setUp(() {
     mockAppState = MockAppState();
+    mockCP = MockClassificationProvider();
+
     // Default stubs
-    when(() => mockAppState.allCategories).thenReturn(['Food', 'Transport', 'Shopping', 'Others']);
+    when(() => mockAppState.allCategories)
+        .thenReturn(['Food', 'Transport', 'Shopping', 'Others']);
     when(() => mockAppState.isVoiceListening).thenReturn(false);
+
+    // Stub natureOf for classification provider
+    when(() => mockCP.natureOf(any(), any()))
+        .thenReturn(ExpenseNature.sometime);
   });
 
   Widget createTestableWidget(MyTransaction tx) {
-    return ChangeNotifierProvider<AppState>.value(
-      value: mockAppState,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppState>.value(value: mockAppState),
+        ChangeNotifierProvider<ClassificationProvider>.value(value: mockCP),
+      ],
       child: MaterialApp(
         home: PopupScreen(myTransaction: tx),
       ),
     );
   }
 
-  group('PopupScreen - Learning Card', () {
-    testWidgets('should show standard Memory card for real merchants', (WidgetTester tester) async {
+  group('PopupScreen - Redesigned UI', () {
+    testWidgets('should show auto-categorize option for real merchants',
+        (WidgetTester tester) async {
       final tx = MyTransaction(
         id: '1',
         timestamp: DateTime.now(),
@@ -44,21 +62,21 @@ void main() {
       await tester.pumpWidget(createTestableWidget(tx));
       await tester.pumpAndSettle();
 
-      // Initially category is null, so card might not be visible depending on implementation.
+      // Initially category is null
       // Let's select a category first.
-      await tester.tap(find.text('🍕 Food'));
+      await tester.tap(find.text('Food'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Memory: Active'), findsOneWidget);
-      expect(find.textContaining('automatically categorize it as "Food"'), findsOneWidget);
-      expect(find.byIcon(Icons.psychology_rounded), findsOneWidget);
-      
-      // Verify switch is ON by default for real merchants
-      final Switch memorySwitch = tester.widget(find.byType(Switch));
-      expect(memorySwitch.value, isTrue);
+      expect(find.text('Auto-categorize in future'), findsOneWidget);
+      expect(
+          find.text('Apply this to all future payments here'), findsOneWidget);
+
+      // Verify it's NOT checked by default in new UI logic
+      expect(find.byIcon(Icons.circle_outlined), findsOneWidget);
     });
 
-    testWidgets('should show Warning card for generic bank IDs', (WidgetTester tester) async {
+    testWidgets('should allow toggling auto-categorize',
+        (WidgetTester tester) async {
       final tx = MyTransaction(
         id: '2',
         timestamp: DateTime.now(),
@@ -74,27 +92,18 @@ void main() {
       await tester.pumpWidget(createTestableWidget(tx));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('🍕 Food'));
+      await tester.tap(find.text('Food'));
       await tester.pumpAndSettle();
 
-      // Verify switch is OFF by default for generic IDs
-      Switch memorySwitch = tester.widget(find.byType(Switch));
-      expect(memorySwitch.value, isFalse);
+      // Should be unchecked
+      expect(find.byIcon(Icons.circle_outlined), findsOneWidget);
 
-      // Warning should NOT be visible yet because memory is OFF
-      expect(find.textContaining('Generic bank ID detected'), findsNothing);
-      expect(find.textContaining('This is a one-time categorization'), findsOneWidget);
-
-      // Now toggle it ON
-      await tester.tap(find.byType(Switch));
+      // Toggle it ON
+      await tester.tap(find.text('Auto-categorize in future'));
       await tester.pumpAndSettle();
 
-      // Now the warning SHOULD be visible
-      expect(find.textContaining('Generic bank ID detected'), findsOneWidget);
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
-      
-      memorySwitch = tester.widget(find.byType(Switch));
-      expect(memorySwitch.value, isTrue);
+      // Should be checked
+      expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
     });
   });
 }

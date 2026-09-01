@@ -27,7 +27,8 @@ void main() {
       expect(AppConstants.isGenericId('AX-SBIUPI'), isTrue);
       expect(AppConstants.isGenericId('ax-sbiupi'), isFalse);
       expect(AppConstants.isGenericId('Starbucks'), isFalse);
-      expect(AppConstants.isGenericId('STARBUCKS'), isTrue); // This is acceptable as a fallback for all-caps strings
+      expect(AppConstants.isGenericId('STARBUCKS'),
+          isTrue); // This is acceptable as a fallback for all-caps strings
     });
   });
 }

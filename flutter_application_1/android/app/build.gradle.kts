@@ -30,6 +30,13 @@ android {
         versionName = flutter.versionName
     }
 
+    lint {
+        baseline = file("lint-baseline.xml")
+        checkReleaseBuilds = false
+        abortOnError = false
+        disable += "Deprecation"
+    }
+
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")

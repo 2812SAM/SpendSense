@@ -12,10 +12,17 @@ import '../services/secure_storage_service.dart';
 
 class SheetsService {
   final http.Client _client;
+  final SecureStorageService _secure;
 
-  SheetsService({http.Client? client}) : _client = client ?? http.Client();
+  SheetsService({
+    http.Client? client,
+    SecureStorageService? secure,
+  })  : _client = client ?? http.Client(),
+        _secure = secure ?? SecureStorageService.instance;
 
-  static final SheetsService instance = SheetsService();
+  static final SheetsService instance = SheetsService(
+    secure: SecureStorageService.instance,
+  );
 
   bool debugForceFail = false;
 
@@ -27,11 +34,13 @@ class SheetsService {
     }
 
     try {
-      final response = await _client.post(
-        Uri.parse(webhookUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(transaction.toSheetJson()),
-      );
+      final response = await _client
+          .post(
+            Uri.parse(webhookUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(transaction.toSheetJson()),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) return false;
 
@@ -54,6 +63,11 @@ class SheetsService {
   }
 
   Future<String?> getSavedWebhookUrl() async {
+    final secureUrl = await _secure.readSecret(AppConstants.prefWebhookUrl);
+    if (secureUrl != null && secureUrl.isNotEmpty) {
+      return secureUrl;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final current = prefs.getString(AppConstants.prefWebhookUrl);
 
@@ -71,7 +85,7 @@ class SheetsService {
   }
 
   Future<void> saveWebhookUrl(String url) async {
-    await SecureStorageService.instance.saveSecret(AppConstants.prefWebhookUrl, url);
+    await _secure.saveSecret(AppConstants.prefWebhookUrl, url);
   }
 
   Future<bool> testWebhook(String url) async {

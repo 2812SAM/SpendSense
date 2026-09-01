@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
@@ -27,12 +28,24 @@ class SecureStorageService {
 
   /// Gets the database encryption key or generates one if it doesn't exist.
   Future<String> getDatabaseKey() async {
-    String? key = await readSecret(AppConstants.dbEncryptionKey);
-    if (key == null || key.isEmpty) {
-      key = _generateRandomKey();
+    try {
+      var key = await readSecret(AppConstants.dbEncryptionKey);
+      if (key == null || key.isEmpty) {
+        key = _generateRandomKey();
+        await saveSecret(AppConstants.dbEncryptionKey, key);
+        debugPrint('SpendSense SecOps: New database key generated and saved.');
+      }
+      return key;
+    } catch (e) {
+      debugPrint('SpendSense SecOps: Keystore access failed: $e');
+      // If keystore is corrupted, we must clear it to allow the app to function,
+      // even if it means losing access to the old encrypted database.
+      // Better a fresh start than a bricked app.
+      await _storage.deleteAll();
+      final key = _generateRandomKey();
       await saveSecret(AppConstants.dbEncryptionKey, key);
+      return key;
     }
-    return key;
   }
 
   String _generateRandomKey() {
@@ -44,7 +57,7 @@ class SecureStorageService {
   /// Migrates secrets from SharedPreferences to SecureStorage if they exist.
   Future<void> migrateFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Migrate API Key
     final apiKey = prefs.getString(AppConstants.prefClaudeApiKey);
     if (apiKey != null && apiKey.isNotEmpty) {
